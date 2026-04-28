@@ -7,68 +7,449 @@
   <title>by_account · 記帳</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/favicon.svg" type="image/svg+xml" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    // 主題：蜂蜜拿鐵（見 docs/DESIGN.md）
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            warmBg:  '#FAF7F2',
-            surface: '#FFFFFF',
-            ink:     '#3F2D20',
-            muted:   '#8B7B6E',
-            line:    '#EDE6DD',
-            soft:    '#F5EFE6',
-            honey: { 100:'#FCEFD6', 400:'#EFB155', 500:'#E29A2D', 600:'#C57E1B', 700:'#9C6314' },
-            mint:    '#5BA876',
-            brick:   '#C95B4D',
-            yolk:    '#E0B340',
-            lilac:   '#7E6B9E'
-          },
-          fontFamily: {
-            sans: ['-apple-system','Noto Sans TC','PingFang TC','Microsoft JhengHei','system-ui','sans-serif']
-          }
-        }
-      }
-    };
-  </script>
   <style>
+    /* =============== Design Tokens =============== */
+    :root {
+      --warm-bg:    #FAF7F2;
+      --surface:    #FFFFFF;
+      --soft:       #F5EFE6;
+      --line:       #EDE6DD;
+      --line-strong:#E0D6C7;
+      --ink:        #3F2D20;
+      --ink-2:      #5C463A;
+      --muted:      #8B7B6E;
+      --muted-2:    #B5A899;
+      --honey:      #E29A2D;
+      --honey-d:    #C57E1B;
+      --honey-l:    #FCEFD6;
+      --honey-xl:   #FEF7E6;
+      --mint:       #5BA876;
+      --mint-l:     #DDEEE3;
+      --brick:      #C95B4D;
+      --brick-l:    #F4DDDA;
+      --yolk:       #E0B340;
+      --yolk-l:     #F8EBC8;
+      --lilac:      #7E6B9E;
+      --lilac-l:    #E5DFEC;
+      --shadow-card: 0 1px 2px rgba(63,45,32,.04), 0 4px 16px rgba(63,45,32,.05);
+      --shadow-pop:  0 8px 24px rgba(63,45,32,.12);
+      --shadow-honey:0 2px 0 rgba(197,126,27,.22), 0 6px 16px rgba(226,154,45,.20);
+      --r-sm: 12px;
+      --r-md: 16px;
+      --r-lg: 20px;
+      --r-xl: 24px;
+      --r-2xl: 28px;
+      --r-pill: 9999px;
+      --space: 16px;
+      --header-h: 56px;
+      --nav-h: 64px;
+      --safe-bottom: env(safe-area-inset-bottom);
+      --safe-top: env(safe-area-inset-top);
+    }
+
+    /* =============== Reset =============== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
-    body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; font-feature-settings: 'tnum' on; }
-    .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0.75rem); }
-    .safe-top { padding-top: max(env(safe-area-inset-top), 0.5rem); }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "PingFang TC",
+                   "Microsoft JhengHei", "Helvetica Neue", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      color: var(--ink);
+      background: var(--warm-bg);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: none;
+      font-feature-settings: 'tnum' on;
+    }
+    button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+    input, select, textarea { font: inherit; color: inherit; }
+    a { color: var(--honey-d); text-decoration: none; }
+    img, svg { display: block; max-width: 100%; }
     .num { font-variant-numeric: tabular-nums; font-weight: 600; }
-    .shadow-card { box-shadow: 0 1px 2px rgba(63,45,32,.04), 0 1px 8px rgba(63,45,32,.04); }
-    .shadow-honey { box-shadow: 0 2px 0 rgba(197,126,27,.25); }
-    .nav-dot { width: 4px; height: 4px; border-radius: 9999px; background: #E29A2D; margin: 2px auto 0; }
-  </style>
-  <style type="text/tailwindcss">
-    @layer components {
-      .input { @apply w-full rounded-2xl border border-line bg-white px-4 py-3 text-base text-ink placeholder:text-muted/70 outline-none transition focus:border-honey-500 focus:ring-4 focus:ring-honey-100; }
-      .btn  { @apply inline-flex items-center justify-center rounded-2xl px-5 py-2.5 text-sm font-semibold transition active:scale-[.97]; }
-      .btn-primary { @apply btn bg-honey-500 text-white hover:bg-honey-600 shadow-honey; }
-      .btn-ghost   { @apply btn bg-soft text-ink hover:bg-line; }
-      .btn-danger  { @apply btn bg-white text-brick border border-brick/30 hover:bg-brick/5; }
-      .card { @apply rounded-3xl bg-surface shadow-card border border-line; }
-      .chip { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* =============== Backgrounds =============== */
+    .bg-decor {
+      position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background:
+        radial-gradient(80% 60% at 50% -10%, var(--honey-xl) 0%, transparent 60%),
+        radial-gradient(60% 40% at 100% 110%, var(--lilac-l) 0%, transparent 70%),
+        var(--warm-bg);
+    }
+
+    /* =============== Buttons =============== */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 12px 20px; border-radius: var(--r-md); font-size: 15px; font-weight: 600;
+      transition: transform .12s, background .15s, box-shadow .15s; user-select: none;
+      min-height: 44px; line-height: 1;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn--primary {
+      background: var(--honey); color: #fff;
+      box-shadow: var(--shadow-honey);
+    }
+    .btn--primary:hover { background: var(--honey-d); }
+    .btn--ghost { background: var(--soft); color: var(--ink); }
+    .btn--ghost:hover { background: var(--line); }
+    .btn--danger {
+      background: var(--surface); color: var(--brick);
+      border: 1px solid var(--brick-l);
+    }
+    .btn--danger:hover { background: var(--brick-l); }
+    .btn--block { width: 100%; }
+    .btn--lg { padding: 14px 24px; font-size: 16px; min-height: 52px; }
+    .btn--icon {
+      width: 40px; height: 40px; padding: 0; border-radius: var(--r-pill);
+      color: var(--muted); font-size: 20px;
+    }
+    .btn--icon:hover { background: var(--soft); color: var(--ink); }
+
+    /* =============== Form =============== */
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field__label { font-size: 13px; color: var(--muted); padding-left: 4px; }
+    .input, .select, .textarea {
+      width: 100%; padding: 13px 16px; border: 1.5px solid var(--line);
+      border-radius: var(--r-md); background: var(--surface); color: var(--ink);
+      font-size: 16px; outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .input::placeholder, .textarea::placeholder { color: var(--muted-2); }
+    .input:focus, .select:focus, .textarea:focus {
+      border-color: var(--honey); box-shadow: 0 0 0 4px var(--honey-l);
+    }
+    .input--with-icon { padding-left: 44px; }
+    .input-wrap { position: relative; }
+    .input-wrap__icon {
+      position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+      font-size: 18px; opacity: .55; pointer-events: none;
+    }
+    .input--amount {
+      text-align: right; font-size: 32px; font-weight: 700;
+      letter-spacing: -.02em; padding: 18px 18px;
+    }
+    .textarea { min-height: 70px; resize: vertical; line-height: 1.5; }
+
+    /* checkbox */
+    .check { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+    .check__box {
+      width: 22px; height: 22px; border: 1.5px solid var(--line-strong);
+      border-radius: 6px; background: var(--surface);
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: all .15s;
+    }
+    .check input { display: none; }
+    .check input:checked + .check__box {
+      background: var(--honey); border-color: var(--honey);
+    }
+    .check input:checked + .check__box::after {
+      content: ''; width: 6px; height: 11px; border: solid #fff; border-width: 0 2.5px 2.5px 0;
+      transform: rotate(45deg) translate(-1px,-1px);
+    }
+    .check__label { font-size: 14px; color: var(--ink-2); }
+
+    /* toggle switch */
+    .switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+    .switch input { display: none; }
+    .switch__track {
+      position: absolute; inset: 0; background: var(--line-strong); border-radius: var(--r-pill);
+      transition: background .2s;
+    }
+    .switch__thumb {
+      position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+      background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+      transition: transform .2s;
+    }
+    .switch input:checked ~ .switch__track { background: var(--honey); }
+    .switch input:checked ~ .switch__thumb { transform: translateX(18px); }
+
+    /* =============== Card =============== */
+    .card {
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: var(--r-2xl); box-shadow: var(--shadow-card);
+    }
+    .card__pad { padding: 20px; }
+    .card__pad-sm { padding: 14px 16px; }
+
+    /* =============== Chips / Badges =============== */
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px;
+      border-radius: var(--r-pill); font-size: 12px; font-weight: 600;
+    }
+    .chip--honey { background: var(--honey-l); color: var(--honey-d); }
+    .chip--mint  { background: var(--mint-l);  color: #2F7D55; }
+    .chip--lilac { background: var(--lilac-l); color: var(--lilac); }
+    .chip--soft  { background: var(--soft);    color: var(--muted); }
+
+    /* =============== Layouts =============== */
+    .app { min-height: 100vh; display: flex; flex-direction: column; }
+    .app__header {
+      position: sticky; top: 0; z-index: 30;
+      padding-top: var(--safe-top);
+      background: rgba(250,247,242,.85);
+      backdrop-filter: saturate(180%) blur(16px);
+      -webkit-backdrop-filter: saturate(180%) blur(16px);
+      border-bottom: 1px solid var(--line);
+    }
+    .app__header-inner {
+      height: var(--header-h); display: flex; align-items: center; justify-content: space-between;
+      padding: 0 8px;
+    }
+    .app__title { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+    .app__main { flex: 1; padding: 16px; padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + 24px); }
+    .app__nav {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+      padding-bottom: var(--safe-bottom);
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid var(--line);
+      box-shadow: 0 -2px 12px rgba(63,45,32,.04);
+    }
+    .app__nav-inner { display: grid; grid-template-columns: repeat(3, 1fr); height: var(--nav-h); }
+    .nav-item {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+      color: var(--muted); font-size: 11px; transition: color .15s;
+    }
+    .nav-item__icon { font-size: 22px; line-height: 1; }
+    .nav-item.is-active { color: var(--honey-d); font-weight: 700; }
+    .nav-item.is-active .nav-item__dot {
+      width: 4px; height: 4px; border-radius: 50%; background: var(--honey); margin-top: 2px;
+    }
+
+    /* =============== Center page =============== */
+    .center-page {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 24px 16px;
+    }
+
+    /* =============== Logo =============== */
+    .logo {
+      width: 76px; height: 76px; border-radius: 22px;
+      background: linear-gradient(135deg, var(--honey-l) 0%, #FFE2A8 100%);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 38px; font-weight: 800; color: var(--honey-d);
+      box-shadow: 0 6px 18px rgba(226,154,45,.30);
+    }
+
+    /* =============== Login =============== */
+    .login-card { width: 100%; max-width: 380px; padding: 32px 24px; }
+    .login-hero { text-align: center; margin-bottom: 24px; }
+    .login-hero__title { font-size: 26px; font-weight: 800; margin-top: 14px; letter-spacing: -.02em; }
+    .login-hero__sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
+    /* =============== Home — ledger list =============== */
+    .greet { padding: 4px 4px 16px; }
+    .greet__hi { font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
+    .greet__sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .ledger-list { display: flex; flex-direction: column; gap: 12px; }
+    .ledger-card {
+      display: flex; align-items: center; gap: 14px; padding: 16px;
+      width: 100%; text-align: left; background: var(--surface);
+      border: 1px solid var(--line); border-radius: var(--r-2xl);
+      box-shadow: var(--shadow-card); transition: transform .12s, box-shadow .15s;
+    }
+    .ledger-card:active { transform: scale(.985); }
+    .ledger-card:hover { box-shadow: var(--shadow-pop); }
+    .ledger-card__icon {
+      width: 52px; height: 52px; border-radius: 16px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 24px;
+    }
+    .ledger-card__icon--shared  { background: var(--honey-l); }
+    .ledger-card__icon--private { background: var(--lilac-l); }
+    .ledger-card__icon--locked  { background: var(--lilac-l); opacity: .65; }
+    .ledger-card__body { flex: 1; min-width: 0; }
+    .ledger-card__name { font-weight: 700; font-size: 16px; color: var(--ink); }
+    .ledger-card__meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+    .ledger-card__role { color: var(--muted); font-size: 12px; }
+    .ledger-card__chev { color: var(--muted-2); font-size: 22px; }
+
+    /* empty state */
+    .empty {
+      padding: 48px 20px; text-align: center;
+      display: flex; flex-direction: column; gap: 12px; align-items: center;
+    }
+    .empty__icon { font-size: 56px; }
+    .empty__title { font-weight: 700; color: var(--ink); }
+    .empty__hint { color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+    /* =============== Ledger detail =============== */
+    .month-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 8px 14px;
+    }
+    .month-bar__label { font-size: 17px; font-weight: 700; }
+    .summary {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0;
+      padding: 18px 8px; text-align: center;
+    }
+    .summary__cell { padding: 0 4px; }
+    .summary__cell + .summary__cell { border-left: 1px solid var(--line); }
+    .summary__label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    .summary__value { font-size: 17px; font-weight: 700; }
+    .summary__value--mint { color: var(--mint); }
+    .summary__value--brick { color: var(--brick); }
+    .day-group { margin-bottom: 18px; }
+    .day-group__date {
+      font-size: 12px; color: var(--muted); padding: 0 4px 8px; font-weight: 600;
+    }
+    .records { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-2xl); overflow: hidden; box-shadow: var(--shadow-card); }
+    .record {
+      display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+    }
+    .record + .record { border-top: 1px solid var(--line); }
+    .record__icon {
+      width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 20px;
+      background: var(--honey-l);
+    }
+    .record__icon--transfer { background: var(--soft); }
+    .record__body { flex: 1; min-width: 0; }
+    .record__title { font-weight: 600; color: var(--ink); }
+    .record__sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .record__amount { font-size: 16px; }
+    .amount--mint { color: var(--mint); }
+    .amount--brick { color: var(--brick); }
+    .amount--muted { color: var(--muted); }
+
+    .notice {
+      padding: 12px 14px; font-size: 13px; color: var(--ink-2);
+      background: var(--yolk-l); border: 1px solid #E8D49A; border-radius: var(--r-md);
+      margin-bottom: 12px;
+    }
+
+    /* =============== Add record =============== */
+    .type-tabs {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+      padding: 6px; background: var(--soft); border-radius: var(--r-md);
+    }
+    .type-tab {
+      padding: 12px 8px; border-radius: 12px; font-weight: 600; font-size: 14px;
+      color: var(--muted); transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 4px;
+    }
+    .type-tab.is-active { background: var(--surface); color: var(--ink); box-shadow: 0 2px 6px rgba(63,45,32,.08); }
+    .type-tab.is-active.t-expense { color: var(--brick); }
+    .type-tab.is-active.t-income  { color: var(--mint); }
+    .type-tab.is-active.t-transfer{ color: var(--lilac); }
+
+    .cat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .cat-tile {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      padding: 12px 4px; border: 1.5px solid var(--line); background: var(--surface);
+      border-radius: var(--r-md); transition: all .15s;
+    }
+    .cat-tile__icon { font-size: 26px; }
+    .cat-tile__name { font-size: 12px; color: var(--ink-2); }
+    .cat-tile.is-active {
+      background: var(--honey-l); border-color: var(--honey);
+      box-shadow: 0 2px 8px rgba(226,154,45,.20);
+    }
+    .cat-tile.is-active .cat-tile__name { color: var(--honey-d); font-weight: 600; }
+
+    /* =============== Settings =============== */
+    .profile {
+      display: flex; align-items: center; gap: 14px; padding: 18px 16px;
+    }
+    .profile__avatar {
+      width: 56px; height: 56px; border-radius: 18px;
+      background: var(--honey-l); color: var(--honey-d);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; font-weight: 700;
+    }
+    .profile__name { font-size: 17px; font-weight: 700; }
+    .profile__meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .list-item {
+      display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+      width: 100%; text-align: left; transition: background .12s;
+    }
+    .list-item:active { background: var(--soft); }
+    .list-item + .list-item { border-top: 1px solid var(--line); }
+    .list-item__icon { width: 32px; text-align: center; font-size: 18px; }
+    .list-item__label { flex: 1; font-size: 15px; color: var(--ink); }
+    .list-item__chev { color: var(--muted-2); }
+    .list-item--danger .list-item__label { color: var(--brick); }
+
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px;
+    }
+    .toggle-row + .toggle-row { border-top: 1px solid var(--line); }
+    .toggle-row__main { flex: 1; padding-right: 12px; }
+    .toggle-row__title { font-size: 15px; color: var(--ink); }
+    .toggle-row__sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* =============== Side menu (overlay) =============== */
+    .overlay {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(63,45,32,.45);
+      display: flex; justify-content: flex-end;
+      animation: fadeIn .18s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+    @keyframes slideIn { from { transform: translateX(100%) } to { transform: translateX(0) } }
+    .side-menu {
+      width: 78%; max-width: 320px; height: 100%; background: var(--warm-bg);
+      padding: 24px 20px; padding-top: calc(20px + var(--safe-top)); padding-bottom: calc(20px + var(--safe-bottom));
+      display: flex; flex-direction: column; gap: 10px;
+      box-shadow: -8px 0 24px rgba(0,0,0,.10);
+      animation: slideIn .22s ease-out;
+    }
+    .side-menu__user {
+      display: flex; align-items: center; gap: 12px; padding-bottom: 16px;
+      border-bottom: 1px solid var(--line); margin-bottom: 8px;
+    }
+    .side-menu__btn {
+      text-align: left; padding: 12px 14px; border-radius: var(--r-md);
+      color: var(--ink); transition: background .12s; font-size: 15px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .side-menu__btn:active { background: var(--soft); }
+    .side-menu__btn--danger { color: var(--brick); }
+    .side-menu__footer {
+      margin-top: auto; text-align: center; font-size: 11px; color: var(--muted-2);
+    }
+
+    /* =============== Toast =============== */
+    .toast-wrap {
+      position: fixed; top: calc(16px + var(--safe-top)); left: 50%;
+      transform: translateX(-50%); z-index: 60; pointer-events: none;
+    }
+    .toast {
+      padding: 10px 18px; border-radius: var(--r-pill);
+      box-shadow: var(--shadow-pop); font-size: 14px; color: #fff;
+      background: var(--ink); display: flex; align-items: center; gap: 8px;
+    }
+    .toast--error   { background: var(--brick); }
+    .toast--success { background: var(--mint); }
+    .toast.is-show  { animation: toastIn .2s ease-out; }
+    @keyframes toastIn { from { transform: translateY(-12px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+
+    /* =============== Misc =============== */
+    .stack { display: flex; flex-direction: column; }
+    .stack > * + * { margin-top: 16px; }
+    .stack-sm > * + * { margin-top: 10px; }
+    .stack-xs > * + * { margin-top: 6px; }
+    .row { display: flex; align-items: center; gap: 8px; }
+    .grow { flex: 1; min-width: 0; }
+    .center-text { text-align: center; }
+    .hidden { display: none !important; }
+
+    /* iPhone safe area for inputs (avoid auto-zoom) */
+    @media (max-width: 480px) {
+      .input, .select, .textarea { font-size: 16px; }
     }
   </style>
 </head>
-<body class="bg-warmBg text-ink antialiased font-sans">
+<body>
+  <div class="bg-decor"></div>
   <div id="app"></div>
-
-  <!-- Toast -->
-  <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 hidden">
-    <div id="toast-msg" class="px-4 py-2.5 rounded-full shadow-lg text-sm text-white bg-ink"></div>
-  </div>
+  <div class="toast-wrap hidden" id="toast"><div class="toast" id="toast-msg"></div></div>
 
   <script>
   // =====================================================================
   // 1. 設定 / 狀態
   // =====================================================================
-  // 寫死的 Apps Script Web App URL（要改部署時改這裡 + 推 git）
-  // 緊急情況可在瀏覽器 console 跑：localStorage.setItem('by_account:web_app_url','新URL') 然後重整
   const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwoTAXj1rnwLjaXoZhLrYGTE7CCpxHmVFwrSeNS3W16zIjHmv2yV9znPrvn-ey8UOoy1w/exec';
 
   const LS_URL    = 'by_account:web_app_url';
@@ -84,11 +465,10 @@
     page: '',
     cache: { sheets: null, accounts: null, categories: null }
   };
-
   function setUrl(v)   { state.url = v; localStorage.setItem(LS_URL, v); }
   function setToken(v) { state.token = v; localStorage.setItem(LS_TOKEN, v); }
   function setUser(v)  { state.user = v; localStorage.setItem(LS_USER, JSON.stringify(v)); }
-  function setLedger(v){ state.ledger = v; localStorage.setItem(LS_LEDGER, JSON.stringify(v)); state.cache = { sheets: state.cache.sheets, accounts: null, categories: null }; }
+  function setLedger(v){ state.ledger = v; localStorage.setItem(LS_LEDGER, JSON.stringify(v)); state.cache.accounts = state.cache.categories = null; }
   function clearAuth() { setToken(''); setUser(null); setLedger(null); state.cache = { sheets: null, accounts: null, categories: null }; }
 
   // =====================================================================
@@ -99,13 +479,12 @@
     const body = JSON.stringify({ action, payload: payload || {}, session_token: state.token });
     const res = await fetch(state.url, {
       method: 'POST',
-      // text/plain 避開 CORS preflight
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body
     });
     const json = await res.json().catch(() => ({ ok: false, error: 'bad_response' }));
     if (!json.ok) {
-      if (json.error === 'invalid_session' || json.error === 'session_expired' || json.error === 'not_logged_in') {
+      if (['invalid_session','session_expired','not_logged_in'].includes(json.error)) {
         clearAuth();
         navigate('login');
       }
@@ -126,14 +505,15 @@
     const root = document.getElementById('app');
     root.innerHTML = '';
     root.appendChild(el(html));
+    window.scrollTo(0, 0);
   }
   function toast(msg, kind) {
     const box = document.getElementById('toast');
     const m = document.getElementById('toast-msg');
     m.textContent = msg;
-    m.className = 'px-4 py-2.5 rounded-full shadow-lg text-sm text-white ' +
-      (kind === 'error' ? 'bg-brick' : kind === 'success' ? 'bg-mint' : 'bg-ink');
+    m.className = 'toast ' + (kind === 'error' ? 'toast--error' : kind === 'success' ? 'toast--success' : '');
     box.classList.remove('hidden');
+    m.classList.remove('is-show'); void m.offsetWidth; m.classList.add('is-show');
     clearTimeout(toast._t);
     toast._t = setTimeout(() => box.classList.add('hidden'), 2400);
   }
@@ -142,6 +522,19 @@
     return (cur || 'TWD') === 'TWD' ? '$' + s : s + ' ' + cur;
   }
   function todayIso() { return new Date().toISOString().slice(0,10); }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, m =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+  function greetingHi() {
+    const h = new Date().getHours();
+    if (h < 5)  return '🌙 夜深了';
+    if (h < 11) return '🌅 早安';
+    if (h < 14) return '🍱 午安';
+    if (h < 18) return '☕ 午後好';
+    if (h < 22) return '🌆 晚安';
+    return '🌙 夜深了';
+  }
 
   // =====================================================================
   // 4. Router
@@ -155,222 +548,217 @@
     const raw = location.hash.replace(/^#/, '') || 'home';
     const [page, query] = raw.split('?');
     const params = Object.fromEntries(new URLSearchParams(query || ''));
-
-    // URL 一定有值（hardcoded 或 localStorage override），所以登入是第一畫面
+    state.page = page;
     if (!state.token && page !== 'login' && page !== 'reset-url') return pageLogin();
-
     switch (page) {
-      case 'login':       return pageLogin();
-      case 'home':        return pageHome();
-      case 'ledger':      return pageLedger(params);
-      case 'add':         return pageAddRecord(params);
-      case 'settings':    return pageSettings();
-      case 'reset-url':   return pageSetupUrl(true);  // 緊急覆寫用
-      default:            return pageHome();
+      case 'login':     return pageLogin();
+      case 'home':      return pageHome();
+      case 'ledger':    return pageLedger(params);
+      case 'add':       return pageAddRecord();
+      case 'settings':  return pageSettings();
+      case 'reset-url': return pageSetupUrl(true);
+      default:          return pageHome();
     }
   }
   window.addEventListener('hashchange', routeFromHash);
 
   // =====================================================================
-  // 5. 頁面：設定 URL
+  // 5. App shell + Side menu
   // =====================================================================
-  function pageSetupUrl(allowCancel) {
-    render(`
-      <div class="min-h-screen flex items-center justify-center p-4">
-        <div class="card w-full max-w-md p-7 space-y-5">
-          <div class="text-center">
-            <div class="text-5xl mb-2">🔌</div>
-            <h1 class="text-xl font-bold">連線設定</h1>
-            <p class="text-sm text-muted mt-1">先填入 Apps Script Web App 的部署網址，<br/>之後會記住，不用再填囉。</p>
+  function appShell(content, opts = {}) {
+    const back = opts.back
+      ? `<button class="btn--icon" onclick="history.back()" aria-label="返回">←</button>`
+      : `<div style="width:40px"></div>`;
+    return `
+      <div class="app">
+        <header class="app__header">
+          <div class="app__header-inner">
+            ${back}
+            <div class="app__title">${escapeHtml(opts.title || 'by_account')}</div>
+            <button class="btn--icon" onclick="showMenu()" aria-label="選單">⋮</button>
           </div>
-          <input id="urlInput" class="input" placeholder="https://script.google.com/macros/s/.../exec" value="${state.url || ''}" />
-          <div class="flex gap-2">
-            <button id="saveBtn" class="btn-primary flex-1">儲存並繼續</button>
-            ${allowCancel ? '<button id="cancelBtn" class="btn-ghost">取消</button>' : ''}
+        </header>
+        <main class="app__main">${content}</main>
+        <nav class="app__nav">
+          <div class="app__nav-inner">
+            ${navItem('home',     '🏠', '帳本')}
+            ${navItem('add',      '➕', '記帳')}
+            ${navItem('settings', '⚙️', '設定')}
           </div>
-        </div>
+        </nav>
       </div>
-    `);
-    document.getElementById('saveBtn').onclick = async () => {
-      const v = document.getElementById('urlInput').value.trim();
-      if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(v)) {
-        return toast('URL 格式不對', 'error');
-      }
-      setUrl(v);
-      // 健康檢查
-      try {
-        const r = await fetch(v).then(r => r.json());
-        if (!r.ok) throw new Error('健康檢查失敗');
-      } catch (e) {
-        return toast('連不上：' + e.message, 'error');
-      }
-      toast('已連線', 'success');
-      navigate(state.token ? 'home' : 'login');
-    };
-    if (allowCancel) document.getElementById('cancelBtn').onclick = () => navigate('settings');
+    `;
   }
+  function navItem(id, icon, label) {
+    const active = state.page === id ? ' is-active' : '';
+    return `
+      <button class="nav-item${active}" onclick="location.hash='${id}'">
+        <span class="nav-item__icon">${icon}</span>
+        <span>${label}</span>
+        ${state.page === id ? '<span class="nav-item__dot"></span>' : ''}
+      </button>
+    `;
+  }
+  function showMenu() {
+    const u = state.user || {};
+    const init = (u.display_name || u.account || '?').slice(0,1).toUpperCase();
+    const html = `
+      <div class="overlay" id="overlay">
+        <aside class="side-menu" onclick="event.stopPropagation()">
+          <div class="side-menu__user">
+            <div class="profile__avatar" style="width:48px;height:48px;font-size:22px;border-radius:14px">${escapeHtml(init)}</div>
+            <div>
+              <div style="font-weight:700">${escapeHtml(u.display_name || u.account || '')}</div>
+              <div style="font-size:12px;color:var(--muted)">${escapeHtml(u.role || '')}</div>
+            </div>
+          </div>
+          <button class="side-menu__btn" onclick="goAndCloseMenu('settings')">⚙️ <span>設定</span></button>
+          <button class="side-menu__btn side-menu__btn--danger" onclick="logout()">🚪 <span>登出</span></button>
+          <div class="side-menu__footer">by_account · v0.1</div>
+        </aside>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', html);
+    document.getElementById('overlay').onclick = () => closeMenu();
+  }
+  function closeMenu() { document.getElementById('overlay')?.remove(); }
+  function goAndCloseMenu(p) { closeMenu(); location.hash = p; }
+  async function logout() {
+    try { await api('logout'); } catch(e){}
+    clearAuth(); closeMenu(); navigate('login');
+  }
+  window.showMenu = showMenu; window.closeMenu = closeMenu;
+  window.goAndCloseMenu = goAndCloseMenu; window.logout = logout;
 
   // =====================================================================
   // 6. 頁面：登入
   // =====================================================================
   function pageLogin() {
     render(`
-      <div class="min-h-screen flex items-center justify-center p-4">
-        <div class="card w-full max-w-sm p-7 space-y-5">
-          <div class="text-center">
-            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-honey-100 text-3xl mb-2">🍯</div>
-            <h1 class="text-2xl font-bold tracking-tight">by_account</h1>
-            <p class="text-sm text-muted mt-1">歡迎回來，請登入</p>
+      <div class="center-page">
+        <div class="card login-card">
+          <div class="login-hero">
+            <div class="logo">$</div>
+            <div class="login-hero__title">by_account</div>
+            <div class="login-hero__sub">輕鬆管帳，安心生活 ✨</div>
           </div>
-          <div class="space-y-3">
-            <input id="account"  class="input" placeholder="帳號" autocomplete="username" />
-            <input id="password" class="input" placeholder="密碼" type="password" autocomplete="current-password" />
-            <label class="flex items-center gap-2 text-sm text-ink/80 select-none">
-              <input type="checkbox" id="remember" class="w-4 h-4 rounded accent-honey-500" />
-              記住我（30 天）
+          <div class="stack">
+            <div class="input-wrap">
+              <span class="input-wrap__icon">👤</span>
+              <input id="account" class="input input--with-icon" placeholder="帳號" autocomplete="username" />
+            </div>
+            <div class="input-wrap">
+              <span class="input-wrap__icon">🔒</span>
+              <input id="password" class="input input--with-icon" type="password" placeholder="密碼" autocomplete="current-password" />
+            </div>
+            <label class="check">
+              <input type="checkbox" id="remember" />
+              <span class="check__box"></span>
+              <span class="check__label">記住我（30 天）</span>
             </label>
+            <button id="loginBtn" class="btn btn--primary btn--lg btn--block">登入</button>
           </div>
-          <button id="loginBtn" class="btn-primary w-full py-3 text-base">登入</button>
         </div>
       </div>
     `);
     document.getElementById('loginBtn').onclick = doLogin;
     document.getElementById('password').onkeydown = e => { if (e.key === 'Enter') doLogin(); };
-    setTimeout(() => document.getElementById('account').focus(), 50);
+    setTimeout(() => document.getElementById('account').focus(), 60);
   }
   async function doLogin() {
     const account = document.getElementById('account').value.trim();
     const password = document.getElementById('password').value;
     const remember = document.getElementById('remember').checked;
     if (!account || !password) return toast('請輸入帳號與密碼', 'error');
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true; btn.textContent = '登入中…';
     try {
       const r = await api('login', { account, password, remember_me: remember, user_agent: navigator.userAgent });
-      setToken(r.session_token);
-      setUser(r.user);
+      setToken(r.session_token); setUser(r.user);
+      toast('歡迎回來，' + (r.user.display_name || r.user.account), 'success');
       navigate('home');
     } catch (e) {
-      toast('登入失敗：' + e.message, 'error');
+      toast('登入失敗：' + friendlyErr(e.message), 'error');
+      btn.disabled = false; btn.textContent = '登入';
     }
   }
+  function friendlyErr(code) {
+    return ({
+      bad_credentials: '帳號或密碼不正確',
+      account_temporarily_locked: '失敗次數過多，請 15 分鐘後再試',
+      missing_credentials: '帳號密碼不能空白',
+      not_logged_in: '尚未登入',
+      session_expired: '登入逾時，請重新登入',
+      forbidden: '沒有權限',
+      private_view_blocked: '私人帳本擁有者尚未授權',
+      sheet_not_found: '找不到帳本',
+      missing_account: '請輸入帳號',
+      missing_amount: '請輸入金額',
+      missing_category: '請選類別',
+      missing_account_id: '請選帳戶'
+    })[code] || code;
+  }
 
   // =====================================================================
-  // 7. 共用 layout（已登入頁面）
-  // =====================================================================
-  function appShell(content, opts) {
-    opts = opts || {};
-    const title = opts.title || 'by_account';
-    const back = opts.back ? `<button onclick="history.back()" class="w-9 h-9 rounded-full hover:bg-soft active:bg-line transition flex items-center justify-center text-xl leading-none text-ink">←</button>` : '<div class="w-9"></div>';
-    return `
-      <div class="min-h-screen flex flex-col">
-        <header class="safe-top sticky top-0 z-30 bg-warmBg/90 backdrop-blur border-b border-line/70">
-          <div class="flex items-center justify-between px-3 py-2">
-            ${back}
-            <h1 class="text-base font-bold tracking-tight">${title}</h1>
-            <button onclick="(${showMenu.toString()})()" class="w-9 h-9 rounded-full hover:bg-soft active:bg-line transition flex items-center justify-center text-xl leading-none text-muted">⋮</button>
-          </div>
-        </header>
-        <main class="flex-1 px-4 py-4 pb-28">${content}</main>
-        <nav class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-line safe-bottom shadow-[0_-2px_8px_rgba(63,45,32,0.04)]">
-          <div class="grid grid-cols-3">
-            <button onclick="location.hash='home'"     class="py-3 text-xs ${state.page==='home'?'text-honey-600 font-semibold':'text-muted'}">🏠 帳本${state.page==='home'?'<div class=\"nav-dot\"></div>':''}</button>
-            <button onclick="location.hash='add'"      class="py-3 text-xs ${state.page==='add'?'text-honey-600 font-semibold':'text-muted'}">➕ 記帳${state.page==='add'?'<div class=\"nav-dot\"></div>':''}</button>
-            <button onclick="location.hash='settings'" class="py-3 text-xs ${state.page==='settings'?'text-honey-600 font-semibold':'text-muted'}">⚙️ 設定${state.page==='settings'?'<div class=\"nav-dot\"></div>':''}</button>
-          </div>
-        </nav>
-      </div>
-    `;
-  }
-  // 全域 menu（簡易）
-  function showMenu() {
-    const u = JSON.parse(localStorage.getItem('by_account:user') || '{}');
-    const html = `
-      <div id="overlay" class="fixed inset-0 bg-ink/40 z-50 flex justify-end">
-        <div class="bg-warmBg w-3/4 max-w-xs h-full p-5 flex flex-col gap-3 shadow-2xl">
-          <div class="flex items-center gap-3">
-            <div class="w-12 h-12 rounded-2xl bg-honey-100 flex items-center justify-center text-2xl">🍯</div>
-            <div>
-              <div class="font-semibold text-ink">${u.display_name || u.account || ''}</div>
-              <div class="text-xs text-muted">${u.role || ''}</div>
-            </div>
-          </div>
-          <hr class="border-line my-1"/>
-          <button onclick="location.hash='settings';document.getElementById('overlay').remove()" class="text-left py-2.5 px-2 rounded-xl active:bg-soft text-ink">⚙️ 設定</button>
-          <button onclick="logout()" class="text-left py-2.5 px-2 rounded-xl active:bg-brick/5 text-brick">🚪 登出</button>
-          <div class="mt-auto text-xs text-muted/70 text-center">by_account · v0.1</div>
-        </div>
-      </div>
-    `;
-    const div = document.createElement('div');
-    div.innerHTML = html;
-    document.body.appendChild(div.firstElementChild);
-    document.getElementById('overlay').onclick = (e) => {
-      if (e.target.id === 'overlay') e.target.remove();
-    };
-  }
-  async function logout() {
-    try { await api('logout'); } catch (e) {}
-    clearAuth();
-    document.getElementById('overlay')?.remove();
-    navigate('login');
-  }
-  window.logout = logout;
-
-  // =====================================================================
-  // 8. 頁面：首頁（帳本列表）
+  // 7. 頁面：首頁（帳本列表）
   // =====================================================================
   async function pageHome() {
-    render(appShell(`<div class="text-center text-muted/70 py-8">載入中…</div>`, { title: '我的帳本' }));
+    render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: '我的帳本' }));
     let sheets;
     try {
       sheets = await api('list_my_sheets');
       state.cache.sheets = sheets;
     } catch (e) {
-      return render(appShell(`<div class="card p-4 text-brick">載入失敗：${e.message}</div>`, { title: '我的帳本' }));
+      return render(appShell(`<div class="card card__pad" style="color:var(--brick)">載入失敗：${escapeHtml(friendlyErr(e.message))}</div>`, { title: '我的帳本' }));
     }
+    const u = state.user || {};
+    const greet = `
+      <div class="greet">
+        <div class="greet__hi">${greetingHi()}，${escapeHtml(u.display_name || u.account || '')}</div>
+        <div class="greet__sub">今天也要好好記帳喔～</div>
+      </div>
+    `;
     if (!sheets.length) {
-      return render(appShell(`
-        <div class="card p-8 text-center space-y-3">
-          <div class="text-5xl">📒</div>
-          <div class="font-semibold text-ink">還沒有任何帳本</div>
-          <p class="text-sm text-muted">${state.user.role==='user' ? '請聯絡管理員開一本給你 🙋' : '到「設定」建立第一本帳本吧 ✨'}</p>
+      return render(appShell(greet + `
+        <div class="card empty">
+          <div class="empty__icon">📒</div>
+          <div class="empty__title">還沒有任何帳本</div>
+          <div class="empty__hint">${u.role==='user' ? '請聯絡管理員開一本給你 🙋' : '到「設定」建立第一本帳本吧 ✨'}</div>
         </div>
       `, { title: '我的帳本' }));
     }
-    const items = sheets.map(s => {
-      const bgIcon = s.locked ? 'bg-lilac/15' : (s.visibility==='private' ? 'bg-lilac/15' : 'bg-honey-100');
-      const icon = s.locked ? '🔒' : (s.visibility==='private' ? '🔐' : '👥');
-      const visBadge = s.locked
-        ? '<span class="chip bg-lilac/15 text-lilac">🔒 無權檢視</span>'
+    const cards = sheets.map(s => {
+      const iconCls = s.locked ? 'ledger-card__icon--locked' : (s.visibility==='private' ? 'ledger-card__icon--private' : 'ledger-card__icon--shared');
+      const icon   = s.locked ? '🔒' : (s.visibility==='private' ? '🔐' : '👥');
+      const chip   = s.locked
+        ? '<span class="chip chip--lilac">🔒 無權檢視</span>'
         : (s.visibility==='private'
-            ? '<span class="chip bg-lilac/15 text-lilac">私人</span>'
-            : '<span class="chip bg-honey-100 text-honey-700">共同</span>');
+            ? '<span class="chip chip--lilac">私人</span>'
+            : '<span class="chip chip--honey">共同</span>');
       return `
-        <button class="w-full text-left card p-4 active:scale-[.98] transition hover:shadow-md" data-id="${s.id}" data-locked="${s.locked}">
-          <div class="flex items-center gap-3">
-            <div class="w-12 h-12 rounded-2xl ${bgIcon} flex items-center justify-center text-2xl shrink-0">${icon}</div>
-            <div class="flex-1 min-w-0">
-              <div class="font-semibold truncate">${escapeHtml(s.name)}</div>
-              <div class="mt-1 flex items-center gap-1.5 text-xs">${visBadge}<span class="text-muted">· ${s.role}</span></div>
-            </div>
-            <div class="text-muted/70 text-lg">›</div>
+        <button class="ledger-card" data-id="${s.id}" data-locked="${s.locked}">
+          <div class="ledger-card__icon ${iconCls}">${icon}</div>
+          <div class="ledger-card__body">
+            <div class="ledger-card__name truncate">${escapeHtml(s.name)}</div>
+            <div class="ledger-card__meta">${chip}<span class="ledger-card__role">· ${escapeHtml(s.role)}</span></div>
           </div>
+          <div class="ledger-card__chev">›</div>
         </button>
       `;
     }).join('');
-    render(appShell(`<div class="space-y-3">${items}</div>`, { title: '我的帳本' }));
-    document.querySelectorAll('[data-id]').forEach(b => {
+    render(appShell(greet + `<div class="ledger-list">${cards}</div>`, { title: '我的帳本' }));
+    document.querySelectorAll('.ledger-card').forEach(b => {
       b.onclick = () => {
         if (b.dataset.locked === 'true') return toast('該帳本擁有者尚未授權', 'error');
-        const id = b.dataset.id;
-        const sheet = sheets.find(x => x.id === id);
+        const sheet = sheets.find(x => x.id === b.dataset.id);
         setLedger(sheet);
-        navigate('ledger', { id });
+        navigate('ledger', { id: sheet.id });
       };
     });
   }
 
   // =====================================================================
-  // 9. 頁面：單一帳本記錄列表
+  // 8. 頁面：單一帳本
   // =====================================================================
   async function pageLedger(params) {
     if (!state.ledger) return navigate('home');
@@ -379,7 +767,7 @@
     const year  = Number(params.year)  || now.getFullYear();
     const month = Number(params.month) || (now.getMonth()+1);
 
-    render(appShell(`<div class="text-center text-muted/70 py-8">載入中…</div>`, { title: ledger.name, back: true }));
+    render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: ledger.name, back: true }));
     let res, cats, accts;
     try {
       [res, cats, accts] = await Promise.all([
@@ -387,10 +775,9 @@
         api('list_categories', { sheet_id: ledger.id }),
         api('list_accounts',   { sheet_id: ledger.id })
       ]);
-      state.cache.categories = cats;
-      state.cache.accounts = accts;
+      state.cache.categories = cats; state.cache.accounts = accts;
     } catch (e) {
-      return render(appShell(`<div class="card p-4 text-brick">載入失敗：${e.message}</div>`, { title: ledger.name, back: true }));
+      return render(appShell(`<div class="card card__pad" style="color:var(--brick)">載入失敗：${escapeHtml(friendlyErr(e.message))}</div>`, { title: ledger.name, back: true }));
     }
 
     const catMap = {}; cats.forEach(c => catMap[c.id] = c);
@@ -404,65 +791,61 @@
     const dates = Object.keys(grouped).sort().reverse();
 
     const list = dates.length ? dates.map(d => `
-      <div class="space-y-2">
-        <div class="text-xs text-muted px-1.5 font-medium">${d}</div>
-        <div class="card divide-y divide-line/70 overflow-hidden">
-          ${grouped[d].map(r => recordRow(r, catMap, acctMap, ledger.currency)).join('')}
-        </div>
+      <div class="day-group">
+        <div class="day-group__date">${d}</div>
+        <div class="records">${grouped[d].map(r => recordRow(r, catMap, acctMap, ledger.currency)).join('')}</div>
       </div>
     `).join('') : `
-      <div class="card p-10 text-center space-y-2">
-        <div class="text-5xl">🌱</div>
-        <div class="text-muted text-sm">這個月還沒記帳，<br/>從下方 ➕ 開始吧</div>
+      <div class="card empty">
+        <div class="empty__icon">🌱</div>
+        <div class="empty__hint">這個月還沒記帳，<br/>從下方 ➕ 開始吧</div>
       </div>`;
 
     render(appShell(`
-      <div class="space-y-4">
-        <div class="card p-5">
-          <div class="flex items-center justify-between mb-3">
-            <button onclick="changeMonth(${year},${month},-1)" class="w-9 h-9 rounded-full hover:bg-soft active:bg-line text-muted text-lg leading-none">‹</button>
-            <div class="font-bold text-base">${year} 年 ${month} 月</div>
-            <button onclick="changeMonth(${year},${month},1)" class="w-9 h-9 rounded-full hover:bg-soft active:bg-line text-muted text-lg leading-none">›</button>
+      <div class="card" style="margin-bottom:14px">
+        <div class="month-bar">
+          <button class="btn--icon" onclick="changeMonth(${year},${month},-1)">‹</button>
+          <div class="month-bar__label">${year} 年 ${month} 月</div>
+          <button class="btn--icon" onclick="changeMonth(${year},${month},1)">›</button>
+        </div>
+        <div class="summary">
+          <div class="summary__cell">
+            <div class="summary__label">收入</div>
+            <div class="summary__value summary__value--mint num">${fmtMoney(inc, ledger.currency)}</div>
           </div>
-          <div class="grid grid-cols-3 text-center">
-            <div class="border-r border-line">
-              <div class="text-xs text-muted mb-0.5">收入</div>
-              <div class="text-mint num text-base">${fmtMoney(inc, ledger.currency)}</div>
-            </div>
-            <div class="border-r border-line">
-              <div class="text-xs text-muted mb-0.5">支出</div>
-              <div class="text-brick num text-base">${fmtMoney(exp, ledger.currency)}</div>
-            </div>
-            <div>
-              <div class="text-xs text-muted mb-0.5">結餘</div>
-              <div class="num text-base text-ink">${fmtMoney(inc-exp, ledger.currency)}</div>
-            </div>
+          <div class="summary__cell">
+            <div class="summary__label">支出</div>
+            <div class="summary__value summary__value--brick num">${fmtMoney(exp, ledger.currency)}</div>
+          </div>
+          <div class="summary__cell">
+            <div class="summary__label">結餘</div>
+            <div class="summary__value num">${fmtMoney(inc-exp, ledger.currency)}</div>
           </div>
         </div>
-        ${ res.is_admin_view ? '<div class="rounded-2xl p-3 text-xs text-ink/80 bg-yolk/15 border border-yolk/40">⚠️ 你正以 admin 身分檢視此帳本，動作已記錄囉。</div>' : '' }
-        ${list}
       </div>
+      ${ res.is_admin_view ? '<div class="notice">⚠️ 你正以 admin 身分檢視，動作已記錄囉。</div>' : '' }
+      ${list}
     `, { title: ledger.name, back: true }));
   }
   function recordRow(r, catMap, acctMap, cur) {
     const cat = catMap[r.category_id];
     const acct = acctMap[r.account_id];
     const sign = r.type === 'income' ? '+' : (r.type === 'expense' ? '−' : '↔');
-    const color = r.type === 'income' ? 'text-mint' : (r.type === 'expense' ? 'text-brick' : 'text-muted');
-    const iconBg = r.type === 'transfer' ? 'bg-soft' : 'bg-honey-100';
+    const amtCls = r.type === 'income' ? 'amount--mint' : (r.type === 'expense' ? 'amount--brick' : 'amount--muted');
+    const iconCls = r.type === 'transfer' ? 'record__icon record__icon--transfer' : 'record__icon';
     const icon = r.type === 'transfer' ? '🔄' : (cat ? cat.icon : '📌');
     const label = r.type === 'transfer'
       ? `${acct ? acct.name : ''} → ${(acctMap[r.transfer_to_account_id] || {}).name || ''}`
       : (cat ? cat.name : '未分類');
     const sub = [r.note, acct && acct.name].filter(Boolean).map(escapeHtml).join(' · ');
     return `
-      <div class="px-4 py-3 flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center text-xl shrink-0">${icon}</div>
-        <div class="flex-1 min-w-0">
-          <div class="font-medium truncate text-ink">${escapeHtml(label)}</div>
-          ${sub ? `<div class="text-xs text-muted truncate mt-0.5">${sub}</div>` : ''}
+      <div class="record">
+        <div class="${iconCls}">${icon}</div>
+        <div class="record__body">
+          <div class="record__title truncate">${escapeHtml(label)}</div>
+          ${sub ? `<div class="record__sub truncate">${sub}</div>` : ''}
         </div>
-        <div class="${color} num">${sign}${fmtMoney(r.amount, cur)}</div>
+        <div class="record__amount num ${amtCls}">${sign}${fmtMoney(r.amount, cur)}</div>
       </div>
     `;
   }
@@ -475,16 +858,22 @@
   window.changeMonth = changeMonth;
 
   // =====================================================================
-  // 10. 頁面：新增記錄
+  // 9. 頁面：新增記錄
   // =====================================================================
   async function pageAddRecord() {
     if (!state.ledger) {
-      render(appShell(`<div class="card p-4">請先到首頁選擇一個帳本</div>`, { title: '記帳' }));
-      return;
+      return render(appShell(`
+        <div class="card empty">
+          <div class="empty__icon">📒</div>
+          <div class="empty__title">先選一本帳本</div>
+          <div class="empty__hint">回到「帳本」分頁挑一本要記在哪</div>
+          <button class="btn btn--primary" onclick="location.hash='home'">去選帳本</button>
+        </div>
+      `, { title: '記帳' }));
     }
     let cats = state.cache.categories, accts = state.cache.accounts;
     if (!cats || !accts) {
-      render(appShell(`<div class="text-center text-muted/70 py-8">載入中…</div>`, { title: '記帳' }));
+      render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: '記帳' }));
       try {
         [cats, accts] = await Promise.all([
           api('list_categories', { sheet_id: state.ledger.id }),
@@ -492,89 +881,102 @@
         ]);
         state.cache.categories = cats; state.cache.accounts = accts;
       } catch (e) {
-        return render(appShell(`<div class="card p-4 text-brick">${e.message}</div>`, { title: '記帳' }));
+        return render(appShell(`<div class="card card__pad" style="color:var(--brick)">${escapeHtml(friendlyErr(e.message))}</div>`, { title: '記帳' }));
       }
     }
+
     const expCats = cats.filter(c => c.type === 'expense');
     const incCats = cats.filter(c => c.type === 'income');
 
     render(appShell(`
-      <div class="space-y-4">
-        <div class="card p-4 flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-honey-100 flex items-center justify-center text-xl">📒</div>
-          <div class="flex-1 min-w-0">
-            <div class="text-xs text-muted">當前帳本</div>
-            <div class="font-semibold truncate">${escapeHtml(state.ledger.name)}</div>
+      <div class="stack">
+        <div class="card card__pad-sm row" style="gap:12px">
+          <div class="record__icon">📒</div>
+          <div class="grow">
+            <div style="font-size:11px;color:var(--muted)">當前帳本</div>
+            <div style="font-weight:700" class="truncate">${escapeHtml(state.ledger.name)}</div>
           </div>
         </div>
 
-        <div class="grid grid-cols-3 gap-2">
-          <button data-type="expense"  class="type-btn btn-ghost py-3 ring-2 ring-brick/40">💸 支出</button>
-          <button data-type="income"   class="type-btn btn-ghost py-3">💰 收入</button>
-          <button data-type="transfer" class="type-btn btn-ghost py-3">🔄 轉帳</button>
+        <div class="type-tabs">
+          <button class="type-tab t-expense is-active"  data-type="expense">💸 支出</button>
+          <button class="type-tab t-income"             data-type="income">💰 收入</button>
+          <button class="type-tab t-transfer"           data-type="transfer">🔄 轉帳</button>
         </div>
 
-        <div class="card p-4 space-y-3">
-          <input id="amount" class="input text-2xl text-right" inputmode="decimal" placeholder="0" />
-          <input id="date" class="input" type="date" value="${todayIso()}" />
-
-          <div id="catWrap">
-            <div class="text-xs text-muted mb-1">類別</div>
-            <div id="catGrid" class="grid grid-cols-4 gap-2"></div>
+        <div class="card card__pad stack">
+          <input id="amount" class="input input--amount" inputmode="decimal" placeholder="0" />
+          <div class="field">
+            <span class="field__label">日期</span>
+            <input id="date" class="input" type="date" value="${todayIso()}" />
           </div>
 
-          <div>
-            <div class="text-xs text-muted mb-1">帳戶</div>
-            <select id="acct" class="input">
+          <div id="catWrap" class="field">
+            <span class="field__label">類別</span>
+            <div id="catGrid" class="cat-grid"></div>
+          </div>
+
+          <div class="field">
+            <span class="field__label" id="acctLabel">帳戶</span>
+            <select id="acct" class="select">
               ${accts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('')}
             </select>
           </div>
 
-          <div id="acct2Wrap" class="hidden">
-            <div class="text-xs text-muted mb-1">轉入帳戶</div>
-            <select id="acct2" class="input">
+          <div id="acct2Wrap" class="field hidden">
+            <span class="field__label">轉入帳戶</span>
+            <select id="acct2" class="select">
               ${accts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('')}
             </select>
           </div>
 
-          <textarea id="note" class="input" rows="2" placeholder="備註（選填）"></textarea>
+          <div class="field">
+            <span class="field__label">備註（選填）</span>
+            <textarea id="note" class="textarea" rows="2" placeholder="今天請了同事一杯咖啡…"></textarea>
+          </div>
         </div>
 
-        <button id="saveBtn" class="btn-primary w-full py-3 text-base">儲存</button>
+        <button id="saveBtn" class="btn btn--primary btn--lg btn--block">💾 儲存</button>
       </div>
     `, { title: '記帳', back: true }));
 
     let curType = 'expense';
     let curCatId = null;
+
     function paintCats() {
       const list = curType === 'income' ? incCats : (curType === 'expense' ? expCats : []);
       const wrap = document.getElementById('catWrap');
       const a2 = document.getElementById('acct2Wrap');
-      if (curType === 'transfer') { wrap.classList.add('hidden'); a2.classList.remove('hidden'); return; }
+      const acctLabel = document.getElementById('acctLabel');
+      if (curType === 'transfer') {
+        wrap.classList.add('hidden'); a2.classList.remove('hidden');
+        acctLabel.textContent = '轉出帳戶';
+        return;
+      }
       wrap.classList.remove('hidden'); a2.classList.add('hidden');
+      acctLabel.textContent = '帳戶';
       const grid = document.getElementById('catGrid');
       grid.innerHTML = list.map(c => `
-        <button data-cid="${c.id}" class="cat-btn rounded-2xl border border-line bg-white py-3 text-xs flex flex-col items-center gap-1 active:bg-soft transition">
-          <span class="text-2xl">${c.icon || '•'}</span><span class="text-ink/80">${escapeHtml(c.name)}</span>
+        <button class="cat-tile" data-cid="${c.id}">
+          <span class="cat-tile__icon">${c.icon || '•'}</span>
+          <span class="cat-tile__name">${escapeHtml(c.name)}</span>
         </button>
       `).join('');
-      grid.querySelectorAll('.cat-btn').forEach(b => {
+      grid.querySelectorAll('.cat-tile').forEach(b => {
         b.onclick = () => {
           curCatId = b.dataset.cid;
-          grid.querySelectorAll('.cat-btn').forEach(x => { x.classList.remove('ring-2','ring-honey-500','bg-honey-100','border-honey-500'); x.classList.add('bg-white'); });
-          b.classList.remove('bg-white');
-          b.classList.add('ring-2','ring-honey-500','bg-honey-100','border-honey-500');
+          grid.querySelectorAll('.cat-tile').forEach(x => x.classList.remove('is-active'));
+          b.classList.add('is-active');
         };
       });
     }
     paintCats();
 
-    document.querySelectorAll('.type-btn').forEach(b => {
+    document.querySelectorAll('.type-tab').forEach(b => {
       b.onclick = () => {
         curType = b.dataset.type;
-        document.querySelectorAll('.type-btn').forEach(x => x.classList.remove('ring-2','ring-brick/40','ring-mint/40','ring-muted/40'));
-        const ringCls = curType === 'expense' ? 'ring-brick/40' : curType === 'income' ? 'ring-mint/40' : 'ring-muted/40';
-        b.classList.add('ring-2', ringCls);
+        document.querySelectorAll('.type-tab').forEach(x => x.classList.remove('is-active'));
+        b.classList.add('is-active');
         curCatId = null;
         paintCats();
       };
@@ -585,67 +987,101 @@
       const date = document.getElementById('date').value;
       const account_id = document.getElementById('acct').value;
       const note = document.getElementById('note').value;
-      if (!amount || amount <= 0) return toast('請輸入金額', 'error');
+      if (!amount || amount <= 0) return toast('金額還沒填上喔', 'error');
       if (!date) return toast('請選日期', 'error');
       const payload = { sheet_id: state.ledger.id, type: curType, amount, date, account_id, note };
       if (curType === 'transfer') {
         payload.transfer_to_account_id = document.getElementById('acct2').value;
-        if (payload.account_id === payload.transfer_to_account_id) return toast('同一帳戶不可互轉', 'error');
+        if (payload.account_id === payload.transfer_to_account_id)
+          return toast('同一帳戶不可互轉', 'error');
       } else {
         if (!curCatId) return toast('請選類別', 'error');
         payload.category_id = curCatId;
       }
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = true; btn.textContent = '儲存中…';
       try {
         await api('create_record', payload);
-        toast('已記錄', 'success');
+        toast('已記錄囉 ✨', 'success');
         navigate('ledger', { id: state.ledger.id });
       } catch (e) {
-        toast('儲存失敗：' + e.message, 'error');
+        toast('儲存失敗：' + friendlyErr(e.message), 'error');
+        btn.disabled = false; btn.textContent = '💾 儲存';
       }
     };
   }
 
   // =====================================================================
-  // 11. 頁面：設定（簡版）
+  // 10. 頁面：設定
   // =====================================================================
   async function pageSettings() {
     const u = state.user || {};
     const isAdmin = u.role === 'super_admin' || u.role === 'admin';
+    const init = (u.display_name || u.account || '?').slice(0,1).toUpperCase();
     render(appShell(`
-      <div class="space-y-4">
-        <div class="card p-4">
-          <div class="text-xs text-muted">登入身分</div>
-          <div class="font-semibold">${escapeHtml(u.display_name || '')}</div>
-          <div class="text-xs text-muted mt-1">${u.account} · ${u.role}</div>
+      <div class="stack">
+        <div class="card profile">
+          <div class="profile__avatar">${escapeHtml(init)}</div>
+          <div class="grow">
+            <div class="profile__name">${escapeHtml(u.display_name || '')}</div>
+            <div class="profile__meta">${escapeHtml(u.account || '')} · <span class="chip chip--soft">${escapeHtml(u.role || '')}</span></div>
+          </div>
         </div>
 
         ${ isAdmin ? `
-        <div class="card divide-y divide-line/70">
-          <button onclick="quickCreateSheet()" class="w-full text-left px-4 py-3 active:bg-soft">📒 建立新帳本</button>
-          <button onclick="alert('Phase 2 再加 UI；目前可用 API create_user')" class="w-full text-left px-4 py-3 active:bg-soft">👤 使用者管理（v0.2）</button>
-        </div>` : ''}
+          <div class="card">
+            <button class="list-item" onclick="quickCreateSheet()">
+              <span class="list-item__icon">📒</span>
+              <span class="list-item__label">建立新帳本</span>
+              <span class="list-item__chev">›</span>
+            </button>
+            <button class="list-item" onclick="alert('使用者管理 v0.2 再加 UI；目前可用 API create_user')">
+              <span class="list-item__icon">👤</span>
+              <span class="list-item__label">使用者管理（v0.2）</span>
+              <span class="list-item__chev">›</span>
+            </button>
+          </div>` : '' }
 
         ${ state.ledger && state.ledger.is_owner && state.ledger.visibility === 'private' ? `
-        <div class="card p-4 space-y-3">
-          <div class="text-sm font-semibold">私人帳本「${escapeHtml(state.ledger.name)}」</div>
-          <label class="flex items-center justify-between">
-            <span class="text-sm">允許 admin 檢視內容</span>
-            <input type="checkbox" id="aav" ${state.ledger.allow_admin_view ? 'checked' : ''} />
-          </label>
-          <label class="flex items-center justify-between">
-            <span class="text-sm">允許進入跨帳本統計</span>
-            <input type="checkbox" id="aaa" ${state.ledger.allow_admin_aggregate ? 'checked' : ''} />
-          </label>
-          <button onclick="saveSheetFlags()" class="btn-primary w-full">儲存</button>
-        </div>` : ''}
+          <div class="card">
+            <div style="padding:14px 16px;border-bottom:1px solid var(--line);font-weight:700;font-size:14px">
+              🔐 私人帳本「${escapeHtml(state.ledger.name)}」
+            </div>
+            <label class="toggle-row">
+              <div class="toggle-row__main">
+                <div class="toggle-row__title">允許 admin 檢視內容</div>
+                <div class="toggle-row__sub">關閉時 admin 看得到名稱但點不進去</div>
+              </div>
+              <span class="switch">
+                <input type="checkbox" id="aav" ${state.ledger.allow_admin_view ? 'checked' : ''} />
+                <span class="switch__track"></span><span class="switch__thumb"></span>
+              </span>
+            </label>
+            <label class="toggle-row">
+              <div class="toggle-row__main">
+                <div class="toggle-row__title">允許進入跨帳本統計</div>
+                <div class="toggle-row__sub">數字會匯總進總和，不外流明細</div>
+              </div>
+              <span class="switch">
+                <input type="checkbox" id="aaa" ${state.ledger.allow_admin_aggregate ? 'checked' : ''} />
+                <span class="switch__track"></span><span class="switch__thumb"></span>
+              </span>
+            </label>
+            <div style="padding:12px 16px;border-top:1px solid var(--line)">
+              <button class="btn btn--primary btn--block" onclick="saveSheetFlags()">儲存變更</button>
+            </div>
+          </div>` : '' }
 
-        <div class="card divide-y divide-line/70">
-          <button onclick="logout()" class="w-full text-left px-4 py-3 active:bg-soft text-sm text-brick">🚪 登出</button>
+        <div class="card">
+          <button class="list-item list-item--danger" onclick="logout()">
+            <span class="list-item__icon">🚪</span>
+            <span class="list-item__label">登出</span>
+          </button>
         </div>
 
-        <div class="text-center text-xs text-muted/60 pt-2">
-          by_account · v0.1<br/>
-          <button onclick="location.hash='reset-url'" class="hover:text-muted underline-offset-2 hover:underline">變更連線設定</button>
+        <div class="center-text" style="font-size:11px;color:var(--muted-2);padding:8px 0 16px">
+          by_account · v0.1 ·
+          <button onclick="location.hash='reset-url'" style="color:inherit;text-decoration:underline;text-underline-offset:2px">變更連線</button>
         </div>
       </div>
     `, { title: '設定' }));
@@ -656,49 +1092,65 @@
     const visibility = confirm('要設為「私人帳本」嗎？\n（OK = 私人 / 取消 = 共同編輯）') ? 'private' : 'shared';
     try {
       await api('create_sheet', { name, visibility });
-      toast('已建立', 'success');
+      toast('建立成功 ✨', 'success');
       state.cache.sheets = null;
       navigate('home');
-    } catch (e) { toast('失敗：' + e.message, 'error'); }
+    } catch (e) { toast('失敗：' + friendlyErr(e.message), 'error'); }
   }
   async function saveSheetFlags() {
     try {
-      await api('update_sheet_flags', {
-        sheet_id: state.ledger.id,
-        allow_admin_view: document.getElementById('aav').checked,
-        allow_admin_aggregate: document.getElementById('aaa').checked
-      });
-      const updated = { ...state.ledger,
-        allow_admin_view: document.getElementById('aav').checked,
-        allow_admin_aggregate: document.getElementById('aaa').checked
-      };
-      setLedger(updated);
+      const aav = document.getElementById('aav').checked;
+      const aaa = document.getElementById('aaa').checked;
+      await api('update_sheet_flags', { sheet_id: state.ledger.id, allow_admin_view: aav, allow_admin_aggregate: aaa });
+      setLedger({ ...state.ledger, allow_admin_view: aav, allow_admin_aggregate: aaa });
       toast('已儲存', 'success');
-    } catch (e) { toast('失敗：' + e.message, 'error'); }
+    } catch (e) { toast('失敗：' + friendlyErr(e.message), 'error'); }
   }
-  window.quickCreateSheet = quickCreateSheet;
-  window.saveSheetFlags = saveSheetFlags;
+  window.quickCreateSheet = quickCreateSheet; window.saveSheetFlags = saveSheetFlags;
 
   // =====================================================================
-  // 12. 工具
+  // 11. 頁面：手動 URL 設定（緊急覆寫）
   // =====================================================================
-  function escapeHtml(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, m =>
-      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  function pageSetupUrl(allowCancel) {
+    render(`
+      <div class="center-page">
+        <div class="card login-card">
+          <div class="login-hero">
+            <div class="logo">🔌</div>
+            <div class="login-hero__title">變更連線設定</div>
+            <div class="login-hero__sub">緊急情況用：覆寫 Apps Script Web App 網址</div>
+          </div>
+          <div class="stack">
+            <input id="urlInput" class="input" placeholder="https://script.google.com/macros/s/.../exec" value="${state.url || ''}" />
+            <button id="saveBtn" class="btn btn--primary btn--block">儲存並繼續</button>
+            ${allowCancel ? '<button id="cancelBtn" class="btn btn--ghost btn--block">取消</button>' : ''}
+            <button id="resetBtn" class="btn btn--ghost btn--block">恢復為預設網址</button>
+          </div>
+        </div>
+      </div>
+    `);
+    document.getElementById('saveBtn').onclick = async () => {
+      const v = document.getElementById('urlInput').value.trim();
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(v)) return toast('URL 格式不對', 'error');
+      setUrl(v); toast('已儲存', 'success');
+      navigate(state.token ? 'home' : 'login');
+    };
+    document.getElementById('resetBtn').onclick = () => {
+      localStorage.removeItem(LS_URL); state.url = WEB_APP_URL;
+      toast('已恢復預設', 'success');
+      navigate(state.token ? 'home' : 'login');
+    };
+    if (allowCancel) document.getElementById('cancelBtn').onclick = () => history.back();
   }
 
   // =====================================================================
-  // 13. PWA service worker
+  // 12. PWA + 啟動
   // =====================================================================
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('service-worker.js').catch(() => {});
     });
   }
-
-  // =====================================================================
-  // 14. 啟動
-  // =====================================================================
   routeFromHash();
   </script>
 </body>
