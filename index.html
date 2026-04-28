@@ -67,13 +67,17 @@
   // =====================================================================
   // 1. 設定 / 狀態
   // =====================================================================
+  // 寫死的 Apps Script Web App URL（要改部署時改這裡 + 推 git）
+  // 緊急情況可在瀏覽器 console 跑：localStorage.setItem('by_account:web_app_url','新URL') 然後重整
+  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwoTAXj1rnwLjaXoZhLrYGTE7CCpxHmVFwrSeNS3W16zIjHmv2yV9znPrvn-ey8UOoy1w/exec';
+
   const LS_URL    = 'by_account:web_app_url';
   const LS_TOKEN  = 'by_account:session_token';
   const LS_USER   = 'by_account:user';
   const LS_LEDGER = 'by_account:current_ledger';
 
   const state = {
-    url:    localStorage.getItem(LS_URL) || '',
+    url:    localStorage.getItem(LS_URL) || WEB_APP_URL,
     token:  localStorage.getItem(LS_TOKEN) || '',
     user:   JSON.parse(localStorage.getItem(LS_USER) || 'null'),
     ledger: JSON.parse(localStorage.getItem(LS_LEDGER) || 'null'),
@@ -152,8 +156,8 @@
     const [page, query] = raw.split('?');
     const params = Object.fromEntries(new URLSearchParams(query || ''));
 
-    if (!state.url)   return pageSetupUrl();
-    if (!state.token && page !== 'login') return pageLogin();
+    // URL 一定有值（hardcoded 或 localStorage override），所以登入是第一畫面
+    if (!state.token && page !== 'login' && page !== 'reset-url') return pageLogin();
 
     switch (page) {
       case 'login':       return pageLogin();
@@ -161,7 +165,7 @@
       case 'ledger':      return pageLedger(params);
       case 'add':         return pageAddRecord(params);
       case 'settings':    return pageSettings();
-      case 'reset-url':   return pageSetupUrl(true);
+      case 'reset-url':   return pageSetupUrl(true);  // 緊急覆寫用
       default:            return pageHome();
     }
   }
@@ -227,13 +231,11 @@
             </label>
           </div>
           <button id="loginBtn" class="btn-primary w-full py-3 text-base">登入</button>
-          <button id="resetUrlBtn" class="text-xs text-muted/70 mx-auto block hover:text-muted">重設 Web App URL</button>
         </div>
       </div>
     `);
     document.getElementById('loginBtn').onclick = doLogin;
     document.getElementById('password').onkeydown = e => { if (e.key === 'Enter') doLogin(); };
-    document.getElementById('resetUrlBtn').onclick = () => navigate('reset-url');
     setTimeout(() => document.getElementById('account').focus(), 50);
   }
   async function doLogin() {
@@ -638,8 +640,12 @@
         </div>` : ''}
 
         <div class="card divide-y divide-line/70">
-          <button onclick="location.hash='reset-url'" class="w-full text-left px-4 py-3 active:bg-soft text-sm">🔌 變更 Web App URL</button>
           <button onclick="logout()" class="w-full text-left px-4 py-3 active:bg-soft text-sm text-brick">🚪 登出</button>
+        </div>
+
+        <div class="text-center text-xs text-muted/60 pt-2">
+          by_account · v0.1<br/>
+          <button onclick="location.hash='reset-url'" class="hover:text-muted underline-offset-2 hover:underline">變更連線設定</button>
         </div>
       </div>
     `, { title: '設定' }));
