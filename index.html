@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>by_account · 記帳</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/favicon.svg" type="image/svg+xml" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: { brand: { 50:'#eef2ff', 500:'#6366f1', 600:'#4f46e5', 700:'#4338ca' }}}}};
+  </script>
+  <style>
+    html, body { height: 100%; }
+    body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
+    .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0.75rem); }
+    .safe-top { padding-top: max(env(safe-area-inset-top), 0.5rem); }
+  </style>
+  <style type="text/tailwindcss">
+    @layer components {
+      .input { @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20; }
+      .btn  { @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition active:scale-95; }
+      .btn-primary { @apply btn bg-brand-600 text-white hover:bg-brand-700; }
+      .btn-ghost   { @apply btn bg-slate-100 text-slate-700 hover:bg-slate-200; }
+      .card { @apply rounded-2xl bg-white shadow-sm border border-slate-200; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased">
+  <div id="app"></div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 hidden">
+    <div id="toast-msg" class="px-4 py-2 rounded-lg shadow-lg text-sm text-white bg-slate-900"></div>
+  </div>
+
+  <script>
+  // =====================================================================
+  // 1. 設定 / 狀態
+  // =====================================================================
+  const LS_URL    = 'by_account:web_app_url';
+  const LS_TOKEN  = 'by_account:session_token';
+  const LS_USER   = 'by_account:user';
+  const LS_LEDGER = 'by_account:current_ledger';
+
+  const state = {
+    url:    localStorage.getItem(LS_URL) || '',
+    token:  localStorage.getItem(LS_TOKEN) || '',
+    user:   JSON.parse(localStorage.getItem(LS_USER) || 'null'),
+    ledger: JSON.parse(localStorage.getItem(LS_LEDGER) || 'null'),
+    page: '',
+    cache: { sheets: null, accounts: null, categories: null }
+  };
+
+  function setUrl(v)   { state.url = v; localStorage.setItem(LS_URL, v); }
+  function setToken(v) { state.token = v; localStorage.setItem(LS_TOKEN, v); }
+  function setUser(v)  { state.user = v; localStorage.setItem(LS_USER, JSON.stringify(v)); }
+  function setLedger(v){ state.ledger = v; localStorage.setItem(LS_LEDGER, JSON.stringify(v)); state.cache = { sheets: state.cache.sheets, accounts: null, categories: null }; }
+  function clearAuth() { setToken(''); setUser(null); setLedger(null); state.cache = { sheets: null, accounts: null, categories: null }; }
+
+  // =====================================================================
+  // 2. API
+  // =====================================================================
+  async function api(action, payload) {
+    if (!state.url) throw new Error('未設定 Web App URL');
+    const body = JSON.stringify({ action, payload: payload || {}, session_token: state.token });
+    const res = await fetch(state.url, {
+      method: 'POST',
+      // text/plain 避開 CORS preflight
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body
+    });
+    const json = await res.json().catch(() => ({ ok: false, error: 'bad_response' }));
+    if (!json.ok) {
+      if (json.error === 'invalid_session' || json.error === 'session_expired' || json.error === 'not_logged_in') {
+        clearAuth();
+        navigate('login');
+      }
+      throw new Error(json.error || json.message || '未知錯誤');
+    }
+    return json.data;
+  }
+
+  // =====================================================================
+  // 3. UI 工具
+  // =====================================================================
+  function el(html) {
+    const t = document.createElement('template');
+    t.innerHTML = html.trim();
+    return t.content.firstChild;
+  }
+  function render(html) {
+    const root = document.getElementById('app');
+    root.innerHTML = '';
+    root.appendChild(el(html));
+  }
+  function toast(msg, kind) {
+    const box = document.getElementById('toast');
+    const m = document.getElementById('toast-msg');
+    m.textContent = msg;
+    m.className = 'px-4 py-2 rounded-lg shadow-lg text-sm text-white ' +
+      (kind === 'error' ? 'bg-red-600' : kind === 'success' ? 'bg-emerald-600' : 'bg-slate-900');
+    box.classList.remove('hidden');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => box.classList.add('hidden'), 2400);
+  }
+  function fmtMoney(n, cur) {
+    const s = Number(n).toLocaleString('zh-TW', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    return (cur || 'TWD') === 'TWD' ? '$' + s : s + ' ' + cur;
+  }
+  function todayIso() { return new Date().toISOString().slice(0,10); }
+
+  // =====================================================================
+  // 4. Router
+  // =====================================================================
+  function navigate(page, params) {
+    state.page = page;
+    location.hash = '#' + page + (params ? '?' + new URLSearchParams(params) : '');
+    routeFromHash();
+  }
+  function routeFromHash() {
+    const raw = location.hash.replace(/^#/, '') || 'home';
+    const [page, query] = raw.split('?');
+    const params = Object.fromEntries(new URLSearchParams(query || ''));
+
+    if (!state.url)   return pageSetupUrl();
+    if (!state.token && page !== 'login') return pageLogin();
+
+    switch (page) {
+      case 'login':       return pageLogin();
+      case 'home':        return pageHome();
+      case 'ledger':      return pageLedger(params);
+      case 'add':         return pageAddRecord(params);
+      case 'settings':    return pageSettings();
+      case 'reset-url':   return pageSetupUrl(true);
+      default:            return pageHome();
+    }
+  }
+  window.addEventListener('hashchange', routeFromHash);
+
+  // =====================================================================
+  // 5. 頁面：設定 URL
+  // =====================================================================
+  function pageSetupUrl(allowCancel) {
+    render(`
+      <div class="min-h-screen flex items-center justify-center p-4">
+        <div class="card w-full max-w-md p-6 space-y-4">
+          <h1 class="text-xl font-bold">連線設定</h1>
+          <p class="text-sm text-slate-500">輸入 Apps Script Web App 的部署 URL（一次設定，存於本機）。</p>
+          <input id="urlInput" class="input" placeholder="https://script.google.com/macros/s/.../exec" value="${state.url || ''}" />
+          <div class="flex gap-2">
+            <button id="saveBtn" class="btn-primary flex-1">儲存並繼續</button>
+            ${allowCancel ? '<button id="cancelBtn" class="btn-ghost">取消</button>' : ''}
+          </div>
+        </div>
+      </div>
+    `);
+    document.getElementById('saveBtn').onclick = async () => {
+      const v = document.getElementById('urlInput').value.trim();
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(v)) {
+        return toast('URL 格式不對', 'error');
+      }
+      setUrl(v);
+      // 健康檢查
+      try {
+        const r = await fetch(v).then(r => r.json());
+        if (!r.ok) throw new Error('健康檢查失敗');
+      } catch (e) {
+        return toast('連不上：' + e.message, 'error');
+      }
+      toast('已連線', 'success');
+      navigate(state.token ? 'home' : 'login');
+    };
+    if (allowCancel) document.getElementById('cancelBtn').onclick = () => navigate('settings');
+  }
+
+  // =====================================================================
+  // 6. 頁面：登入
+  // =====================================================================
+  function pageLogin() {
+    render(`
+      <div class="min-h-screen flex items-center justify-center p-4">
+        <div class="card w-full max-w-sm p-6 space-y-4">
+          <div class="text-center">
+            <h1 class="text-2xl font-bold">by_account</h1>
+            <p class="text-sm text-slate-500 mt-1">請登入</p>
+          </div>
+          <input id="account"  class="input" placeholder="帳號" autocomplete="username" />
+          <input id="password" class="input" placeholder="密碼" type="password" autocomplete="current-password" />
+          <label class="flex items-center gap-2 text-sm text-slate-600">
+            <input type="checkbox" id="remember" class="rounded" />
+            記住我（30 天）
+          </label>
+          <button id="loginBtn" class="btn-primary w-full">登入</button>
+          <button id="resetUrlBtn" class="text-xs text-slate-400 mx-auto block">重設 Web App URL</button>
+        </div>
+      </div>
+    `);
+    document.getElementById('loginBtn').onclick = doLogin;
+    document.getElementById('password').onkeydown = e => { if (e.key === 'Enter') doLogin(); };
+    document.getElementById('resetUrlBtn').onclick = () => navigate('reset-url');
+    setTimeout(() => document.getElementById('account').focus(), 50);
+  }
+  async function doLogin() {
+    const account = document.getElementById('account').value.trim();
+    const password = document.getElementById('password').value;
+    const remember = document.getElementById('remember').checked;
+    if (!account || !password) return toast('請輸入帳號與密碼', 'error');
+    try {
+      const r = await api('login', { account, password, remember_me: remember, user_agent: navigator.userAgent });
+      setToken(r.session_token);
+      setUser(r.user);
+      navigate('home');
+    } catch (e) {
+      toast('登入失敗：' + e.message, 'error');
+    }
+  }
+
+  // =====================================================================
+  // 7. 共用 layout（已登入頁面）
+  // =====================================================================
+  function appShell(content, opts) {
+    opts = opts || {};
+    const title = opts.title || 'by_account';
+    const back = opts.back ? `<button onclick="history.back()" class="text-2xl leading-none px-2">←</button>` : '<div class="w-9"></div>';
+    const u = state.user || {};
+    return `
+      <div class="min-h-screen flex flex-col">
+        <header class="safe-top sticky top-0 z-30 bg-white border-b border-slate-200">
+          <div class="flex items-center justify-between px-2 py-2">
+            ${back}
+            <h1 class="text-base font-semibold">${title}</h1>
+            <button onclick="(${showMenu.toString()})()" class="px-2 text-slate-500 text-xl leading-none">⋮</button>
+          </div>
+        </header>
+        <main class="flex-1 px-4 py-3 pb-24">${content}</main>
+        <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 safe-bottom">
+          <div class="grid grid-cols-3">
+            <button onclick="location.hash='home'"     class="py-3 text-xs ${state.page==='home'?'text-brand-600 font-semibold':'text-slate-500'}">🏠 帳本</button>
+            <button onclick="location.hash='add'"      class="py-3 text-xs ${state.page==='add'?'text-brand-600 font-semibold':'text-slate-500'}">➕ 記帳</button>
+            <button onclick="location.hash='settings'" class="py-3 text-xs ${state.page==='settings'?'text-brand-600 font-semibold':'text-slate-500'}">⚙️ 設定</button>
+          </div>
+        </nav>
+      </div>
+    `;
+  }
+  // 全域 menu（簡易）
+  function showMenu() {
+    const u = JSON.parse(localStorage.getItem('by_account:user') || '{}');
+    const html = `
+      <div id="overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;justify-content:flex-end;">
+        <div style="background:white;width:75%;max-width:320px;height:100%;padding:20px;display:flex;flex-direction:column;gap:12px;">
+          <div style="font-weight:600">${u.display_name || u.account || ''}</div>
+          <div style="font-size:12px;color:#888">${u.role || ''}</div>
+          <hr/>
+          <button onclick="location.hash='settings';document.getElementById('overlay').remove()" style="text-align:left;padding:8px 0;">⚙️ 設定</button>
+          <button onclick="logout()" style="text-align:left;padding:8px 0;color:#dc2626;">🚪 登出</button>
+          <div style="margin-top:auto;font-size:11px;color:#aaa">by_account · v0.1</div>
+        </div>
+      </div>
+    `;
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    document.body.appendChild(div.firstElementChild);
+    document.getElementById('overlay').onclick = (e) => {
+      if (e.target.id === 'overlay') e.target.remove();
+    };
+  }
+  async function logout() {
+    try { await api('logout'); } catch (e) {}
+    clearAuth();
+    document.getElementById('overlay')?.remove();
+    navigate('login');
+  }
+  window.logout = logout;
+
+  // =====================================================================
+  // 8. 頁面：首頁（帳本列表）
+  // =====================================================================
+  async function pageHome() {
+    render(appShell(`<div class="text-center text-slate-400 py-8">載入中…</div>`, { title: '我的帳本' }));
+    let sheets;
+    try {
+      sheets = await api('list_my_sheets');
+      state.cache.sheets = sheets;
+    } catch (e) {
+      return render(appShell(`<div class="card p-4 text-red-600">載入失敗：${e.message}</div>`, { title: '我的帳本' }));
+    }
+    if (!sheets.length) {
+      return render(appShell(`
+        <div class="card p-6 text-center space-y-3">
+          <div class="text-4xl">📒</div>
+          <div class="font-semibold">還沒有任何帳本</div>
+          <p class="text-sm text-slate-500">${state.user.role==='user' ? '請聯絡管理員為你開設或邀請。' : '到「設定 → 帳本管理」建立一本。'}</p>
+        </div>
+      `, { title: '我的帳本' }));
+    }
+    const items = sheets.map(s => `
+      <button class="w-full text-left card p-4 active:scale-[.98] transition" data-id="${s.id}" data-locked="${s.locked}">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="text-2xl">${s.locked ? '🔒' : (s.visibility==='private'?'🔐':'👥')}</div>
+            <div>
+              <div class="font-semibold">${escapeHtml(s.name)}</div>
+              <div class="text-xs text-slate-500">${s.visibility==='private'?'私人':'共同'} · ${s.role}${s.locked ? ' · 你無權檢視' : ''}</div>
+            </div>
+          </div>
+          <div class="text-slate-400">›</div>
+        </div>
+      </button>
+    `).join('');
+    render(appShell(`<div class="space-y-3">${items}</div>`, { title: '我的帳本' }));
+    document.querySelectorAll('[data-id]').forEach(b => {
+      b.onclick = () => {
+        if (b.dataset.locked === 'true') return toast('該帳本擁有者尚未授權', 'error');
+        const id = b.dataset.id;
+        const sheet = sheets.find(x => x.id === id);
+        setLedger(sheet);
+        navigate('ledger', { id });
+      };
+    });
+  }
+
+  // =====================================================================
+  // 9. 頁面：單一帳本記錄列表
+  // =====================================================================
+  async function pageLedger(params) {
+    if (!state.ledger) return navigate('home');
+    const ledger = state.ledger;
+    const now = new Date();
+    const year  = Number(params.year)  || now.getFullYear();
+    const month = Number(params.month) || (now.getMonth()+1);
+
+    render(appShell(`<div class="text-center text-slate-400 py-8">載入中…</div>`, { title: ledger.name, back: true }));
+    let res, cats, accts;
+    try {
+      [res, cats, accts] = await Promise.all([
+        api('list_records',    { sheet_id: ledger.id, year, month, limit: 500 }),
+        api('list_categories', { sheet_id: ledger.id }),
+        api('list_accounts',   { sheet_id: ledger.id })
+      ]);
+      state.cache.categories = cats;
+      state.cache.accounts = accts;
+    } catch (e) {
+      return render(appShell(`<div class="card p-4 text-red-600">載入失敗：${e.message}</div>`, { title: ledger.name, back: true }));
+    }
+
+    const catMap = {}; cats.forEach(c => catMap[c.id] = c);
+    const acctMap = {}; accts.forEach(a => acctMap[a.id] = a);
+
+    const inc = res.items.filter(r => r.type === 'income').reduce((s,r) => s + Number(r.amount), 0);
+    const exp = res.items.filter(r => r.type === 'expense').reduce((s,r) => s + Number(r.amount), 0);
+
+    const grouped = {};
+    res.items.forEach(r => { (grouped[r.date] = grouped[r.date] || []).push(r); });
+    const dates = Object.keys(grouped).sort().reverse();
+
+    const list = dates.length ? dates.map(d => `
+      <div class="space-y-2">
+        <div class="text-xs text-slate-500 px-1">${d}</div>
+        <div class="card divide-y divide-slate-100">
+          ${grouped[d].map(r => recordRow(r, catMap, acctMap, ledger.currency)).join('')}
+        </div>
+      </div>
+    `).join('') : `<div class="card p-8 text-center text-slate-400">本月無記錄</div>`;
+
+    render(appShell(`
+      <div class="space-y-4">
+        <div class="card p-4">
+          <div class="flex items-center justify-between">
+            <button onclick="changeMonth(${year},${month},-1)" class="px-2 text-slate-500">‹</button>
+            <div class="font-semibold">${year} 年 ${month} 月</div>
+            <button onclick="changeMonth(${year},${month},1)" class="px-2 text-slate-500">›</button>
+          </div>
+          <div class="grid grid-cols-3 mt-3 text-center">
+            <div><div class="text-xs text-slate-500">收入</div><div class="text-emerald-600 font-semibold">${fmtMoney(inc, ledger.currency)}</div></div>
+            <div><div class="text-xs text-slate-500">支出</div><div class="text-red-600 font-semibold">${fmtMoney(exp, ledger.currency)}</div></div>
+            <div><div class="text-xs text-slate-500">結餘</div><div class="font-semibold">${fmtMoney(inc-exp, ledger.currency)}</div></div>
+          </div>
+        </div>
+        ${ res.is_admin_view ? '<div class="card p-3 text-xs text-amber-700 bg-amber-50 border-amber-200">⚠️ 你正以 admin 身分檢視此帳本，動作已記錄。</div>' : '' }
+        ${list}
+      </div>
+    `, { title: ledger.name, back: true }));
+  }
+  function recordRow(r, catMap, acctMap, cur) {
+    const cat = catMap[r.category_id];
+    const acct = acctMap[r.account_id];
+    const sign = r.type === 'income' ? '+' : (r.type === 'expense' ? '-' : '↔');
+    const color = r.type === 'income' ? 'text-emerald-600' : (r.type === 'expense' ? 'text-red-600' : 'text-slate-600');
+    const icon = r.type === 'transfer' ? '🔄' : (cat ? cat.icon : '•');
+    const label = r.type === 'transfer'
+      ? `${acct ? acct.name : ''} → ${(acctMap[r.transfer_to_account_id] || {}).name || ''}`
+      : (cat ? cat.name : '未分類');
+    return `
+      <div class="px-4 py-3 flex items-center gap-3">
+        <div class="text-2xl w-8 text-center">${icon}</div>
+        <div class="flex-1 min-w-0">
+          <div class="font-medium truncate">${escapeHtml(label)}</div>
+          <div class="text-xs text-slate-500 truncate">${escapeHtml(r.note || '')} ${acct ? '· '+escapeHtml(acct.name) : ''}</div>
+        </div>
+        <div class="${color} font-semibold">${sign}${fmtMoney(r.amount, cur)}</div>
+      </div>
+    `;
+  }
+  function changeMonth(y, m, d) {
+    let ny = y, nm = m + d;
+    if (nm > 12) { nm = 1; ny++; }
+    if (nm < 1)  { nm = 12; ny--; }
+    navigate('ledger', { id: state.ledger.id, year: ny, month: nm });
+  }
+  window.changeMonth = changeMonth;
+
+  // =====================================================================
+  // 10. 頁面：新增記錄
+  // =====================================================================
+  async function pageAddRecord() {
+    if (!state.ledger) {
+      render(appShell(`<div class="card p-4">請先到首頁選擇一個帳本</div>`, { title: '記帳' }));
+      return;
+    }
+    let cats = state.cache.categories, accts = state.cache.accounts;
+    if (!cats || !accts) {
+      render(appShell(`<div class="text-center text-slate-400 py-8">載入中…</div>`, { title: '記帳' }));
+      try {
+        [cats, accts] = await Promise.all([
+          api('list_categories', { sheet_id: state.ledger.id }),
+          api('list_accounts',   { sheet_id: state.ledger.id })
+        ]);
+        state.cache.categories = cats; state.cache.accounts = accts;
+      } catch (e) {
+        return render(appShell(`<div class="card p-4 text-red-600">${e.message}</div>`, { title: '記帳' }));
+      }
+    }
+    const expCats = cats.filter(c => c.type === 'expense');
+    const incCats = cats.filter(c => c.type === 'income');
+
+    render(appShell(`
+      <div class="space-y-4">
+        <div class="card p-3">
+          <div class="text-xs text-slate-500 mb-1">當前帳本</div>
+          <div class="font-semibold">${escapeHtml(state.ledger.name)}</div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <button data-type="expense" class="type-btn btn-ghost py-3 ring-2 ring-red-500/30">支出</button>
+          <button data-type="income"  class="type-btn btn-ghost py-3">收入</button>
+          <button data-type="transfer" class="type-btn btn-ghost py-3">轉帳</button>
+        </div>
+
+        <div class="card p-4 space-y-3">
+          <input id="amount" class="input text-2xl text-right" inputmode="decimal" placeholder="0" />
+          <input id="date" class="input" type="date" value="${todayIso()}" />
+
+          <div id="catWrap">
+            <div class="text-xs text-slate-500 mb-1">類別</div>
+            <div id="catGrid" class="grid grid-cols-4 gap-2"></div>
+          </div>
+
+          <div>
+            <div class="text-xs text-slate-500 mb-1">帳戶</div>
+            <select id="acct" class="input">
+              ${accts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('')}
+            </select>
+          </div>
+
+          <div id="acct2Wrap" class="hidden">
+            <div class="text-xs text-slate-500 mb-1">轉入帳戶</div>
+            <select id="acct2" class="input">
+              ${accts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('')}
+            </select>
+          </div>
+
+          <textarea id="note" class="input" rows="2" placeholder="備註（選填）"></textarea>
+        </div>
+
+        <button id="saveBtn" class="btn-primary w-full py-3 text-base">儲存</button>
+      </div>
+    `, { title: '記帳', back: true }));
+
+    let curType = 'expense';
+    let curCatId = null;
+    function paintCats() {
+      const list = curType === 'income' ? incCats : (curType === 'expense' ? expCats : []);
+      const wrap = document.getElementById('catWrap');
+      const a2 = document.getElementById('acct2Wrap');
+      if (curType === 'transfer') { wrap.classList.add('hidden'); a2.classList.remove('hidden'); return; }
+      wrap.classList.remove('hidden'); a2.classList.add('hidden');
+      const grid = document.getElementById('catGrid');
+      grid.innerHTML = list.map(c => `
+        <button data-cid="${c.id}" class="cat-btn rounded-xl border border-slate-200 py-2 text-xs flex flex-col items-center gap-1 active:bg-slate-100">
+          <span class="text-xl">${c.icon || '•'}</span><span>${escapeHtml(c.name)}</span>
+        </button>
+      `).join('');
+      grid.querySelectorAll('.cat-btn').forEach(b => {
+        b.onclick = () => {
+          curCatId = b.dataset.cid;
+          grid.querySelectorAll('.cat-btn').forEach(x => x.classList.remove('ring-2','ring-brand-500'));
+          b.classList.add('ring-2','ring-brand-500');
+        };
+      });
+    }
+    paintCats();
+
+    document.querySelectorAll('.type-btn').forEach(b => {
+      b.onclick = () => {
+        curType = b.dataset.type;
+        document.querySelectorAll('.type-btn').forEach(x => x.classList.remove('ring-2','ring-red-500/30','ring-emerald-500/30','ring-slate-500/30'));
+        const ringCls = curType === 'expense' ? 'ring-red-500/30' : curType === 'income' ? 'ring-emerald-500/30' : 'ring-slate-500/30';
+        b.classList.add('ring-2', ringCls);
+        curCatId = null;
+        paintCats();
+      };
+    });
+
+    document.getElementById('saveBtn').onclick = async () => {
+      const amount = Number(document.getElementById('amount').value);
+      const date = document.getElementById('date').value;
+      const account_id = document.getElementById('acct').value;
+      const note = document.getElementById('note').value;
+      if (!amount || amount <= 0) return toast('請輸入金額', 'error');
+      if (!date) return toast('請選日期', 'error');
+      const payload = { sheet_id: state.ledger.id, type: curType, amount, date, account_id, note };
+      if (curType === 'transfer') {
+        payload.transfer_to_account_id = document.getElementById('acct2').value;
+        if (payload.account_id === payload.transfer_to_account_id) return toast('同一帳戶不可互轉', 'error');
+      } else {
+        if (!curCatId) return toast('請選類別', 'error');
+        payload.category_id = curCatId;
+      }
+      try {
+        await api('create_record', payload);
+        toast('已記錄', 'success');
+        navigate('ledger', { id: state.ledger.id });
+      } catch (e) {
+        toast('儲存失敗：' + e.message, 'error');
+      }
+    };
+  }
+
+  // =====================================================================
+  // 11. 頁面：設定（簡版）
+  // =====================================================================
+  async function pageSettings() {
+    const u = state.user || {};
+    const isAdmin = u.role === 'super_admin' || u.role === 'admin';
+    render(appShell(`
+      <div class="space-y-4">
+        <div class="card p-4">
+          <div class="text-xs text-slate-500">登入身分</div>
+          <div class="font-semibold">${escapeHtml(u.display_name || '')}</div>
+          <div class="text-xs text-slate-500 mt-1">${u.account} · ${u.role}</div>
+        </div>
+
+        ${ isAdmin ? `
+        <div class="card divide-y divide-slate-100">
+          <button onclick="quickCreateSheet()" class="w-full text-left px-4 py-3 active:bg-slate-100">📒 建立新帳本</button>
+          <button onclick="alert('Phase 2 再加 UI；目前可用 API create_user')" class="w-full text-left px-4 py-3 active:bg-slate-100">👤 使用者管理（v0.2）</button>
+        </div>` : ''}
+
+        ${ state.ledger && state.ledger.is_owner && state.ledger.visibility === 'private' ? `
+        <div class="card p-4 space-y-3">
+          <div class="text-sm font-semibold">私人帳本「${escapeHtml(state.ledger.name)}」</div>
+          <label class="flex items-center justify-between">
+            <span class="text-sm">允許 admin 檢視內容</span>
+            <input type="checkbox" id="aav" ${state.ledger.allow_admin_view ? 'checked' : ''} />
+          </label>
+          <label class="flex items-center justify-between">
+            <span class="text-sm">允許進入跨帳本統計</span>
+            <input type="checkbox" id="aaa" ${state.ledger.allow_admin_aggregate ? 'checked' : ''} />
+          </label>
+          <button onclick="saveSheetFlags()" class="btn-primary w-full">儲存</button>
+        </div>` : ''}
+
+        <div class="card divide-y divide-slate-100">
+          <button onclick="location.hash='reset-url'" class="w-full text-left px-4 py-3 active:bg-slate-100 text-sm">🔌 變更 Web App URL</button>
+          <button onclick="logout()" class="w-full text-left px-4 py-3 active:bg-slate-100 text-sm text-red-600">🚪 登出</button>
+        </div>
+      </div>
+    `, { title: '設定' }));
+  }
+  async function quickCreateSheet() {
+    const name = prompt('帳本名稱？');
+    if (!name) return;
+    const visibility = confirm('要設為「私人帳本」嗎？\n（OK = 私人 / 取消 = 共同編輯）') ? 'private' : 'shared';
+    try {
+      await api('create_sheet', { name, visibility });
+      toast('已建立', 'success');
+      state.cache.sheets = null;
+      navigate('home');
+    } catch (e) { toast('失敗：' + e.message, 'error'); }
+  }
+  async function saveSheetFlags() {
+    try {
+      await api('update_sheet_flags', {
+        sheet_id: state.ledger.id,
+        allow_admin_view: document.getElementById('aav').checked,
+        allow_admin_aggregate: document.getElementById('aaa').checked
+      });
+      const updated = { ...state.ledger,
+        allow_admin_view: document.getElementById('aav').checked,
+        allow_admin_aggregate: document.getElementById('aaa').checked
+      };
+      setLedger(updated);
+      toast('已儲存', 'success');
+    } catch (e) { toast('失敗：' + e.message, 'error'); }
+  }
+  window.quickCreateSheet = quickCreateSheet;
+  window.saveSheetFlags = saveSheetFlags;
+
+  // =====================================================================
+  // 12. 工具
+  // =====================================================================
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, m =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  // =====================================================================
+  // 13. PWA service worker
+  // =====================================================================
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js').catch(() => {});
+    });
+  }
+
+  // =====================================================================
+  // 14. 啟動
+  // =====================================================================
+  routeFromHash();
+  </script>
+</body>
+</html>

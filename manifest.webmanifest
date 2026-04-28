@@ -1,0 +1,15 @@
+{
+  "name": "by_account · 記帳",
+  "short_name": "by_account",
+  "description": "個人/家庭記帳，多本帳本與隱私分級",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f172a",
+  "lang": "zh-Hant",
+  "icons": [
+    { "src": "icons/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
