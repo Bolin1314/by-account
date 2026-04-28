@@ -435,6 +435,44 @@
     .center-text { text-align: center; }
     .hidden { display: none !important; }
 
+    /* radio pill group */
+    .radio-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .radio-pill {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 12px; border: 1.5px solid var(--line); border-radius: var(--r-md);
+      background: var(--surface); cursor: pointer; font-size: 14px; font-weight: 600;
+      color: var(--ink-2); transition: all .15s;
+    }
+    .radio-pill input { display: none; }
+    .radio-pill:has(input:checked) {
+      background: var(--honey-l); border-color: var(--honey); color: var(--honey-d);
+      box-shadow: 0 2px 8px rgba(226,154,45,.18);
+    }
+
+    /* advanced disclosure */
+    details.advanced {
+      border-top: 1px solid var(--line); margin-top: 4px; padding-top: 14px;
+    }
+    details.advanced summary {
+      cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted);
+      padding: 4px 0; user-select: none; list-style: none;
+    }
+    details.advanced summary::-webkit-details-marker { display: none; }
+    details.advanced summary::before {
+      content: '▸ '; display: inline-block; transition: transform .15s;
+    }
+    details.advanced[open] summary::before { transform: rotate(90deg); }
+    details.advanced summary:hover { color: var(--ink); }
+    details.advanced > .stack { padding-top: 12px; }
+
+    .field__hint { font-size: 12px; color: var(--muted); padding: 4px; line-height: 1.5; }
+    .field__hint--warn { color: var(--brick); }
+    .copy-chip {
+      display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
+      background: var(--soft); border-radius: 6px; font-family: monospace;
+      font-size: 12px; color: var(--ink); cursor: pointer; user-select: all;
+    }
+
     /* iPhone safe area for inputs (avoid auto-zoom) */
     @media (max-width: 480px) {
       .input, .select, .textarea { font-size: 16px; }
@@ -551,13 +589,14 @@
     state.page = page;
     if (!state.token && page !== 'login' && page !== 'reset-url') return pageLogin();
     switch (page) {
-      case 'login':     return pageLogin();
-      case 'home':      return pageHome();
-      case 'ledger':    return pageLedger(params);
-      case 'add':       return pageAddRecord();
-      case 'settings':  return pageSettings();
-      case 'reset-url': return pageSetupUrl(true);
-      default:          return pageHome();
+      case 'login':       return pageLogin();
+      case 'home':        return pageHome();
+      case 'ledger':      return pageLedger(params);
+      case 'add':         return pageAddRecord();
+      case 'settings':    return pageSettings();
+      case 'new-ledger':  return pageNewLedger();
+      case 'reset-url':   return pageSetupUrl(true);
+      default:            return pageHome();
     }
   }
   window.addEventListener('hashchange', routeFromHash);
@@ -1086,17 +1125,7 @@
       </div>
     `, { title: '設定' }));
   }
-  async function quickCreateSheet() {
-    const name = prompt('帳本名稱？');
-    if (!name) return;
-    const visibility = confirm('要設為「私人帳本」嗎？\n（OK = 私人 / 取消 = 共同編輯）') ? 'private' : 'shared';
-    try {
-      await api('create_sheet', { name, visibility });
-      toast('建立成功 ✨', 'success');
-      state.cache.sheets = null;
-      navigate('home');
-    } catch (e) { toast('失敗：' + friendlyErr(e.message), 'error'); }
-  }
+  function quickCreateSheet() { navigate('new-ledger'); }
   async function saveSheetFlags() {
     try {
       const aav = document.getElementById('aav').checked;
@@ -1107,6 +1136,126 @@
     } catch (e) { toast('失敗：' + friendlyErr(e.message), 'error'); }
   }
   window.quickCreateSheet = quickCreateSheet; window.saveSheetFlags = saveSheetFlags;
+
+  // =====================================================================
+  // 10.5 頁面：建立新帳本
+  // =====================================================================
+  async function pageNewLedger() {
+    const me = state.user || {};
+    const isAdmin = me.role === 'super_admin' || me.role === 'admin';
+    if (!isAdmin) {
+      return render(appShell(`
+        <div class="card empty">
+          <div class="empty__icon">🚫</div>
+          <div class="empty__title">沒有權限</div>
+          <div class="empty__hint">只有管理員可以建立帳本</div>
+        </div>
+      `, { title: '建立帳本', back: true }));
+    }
+
+    // 先載入使用者清單（用於 owner 選單）
+    let users = [];
+    try {
+      users = await api('list_users');
+      users = users.filter(u => u.status === 'active');
+    } catch(e) { users = [{ id: me.id, account: me.account, display_name: me.display_name }]; }
+
+    const ownerOptions = users.map(u =>
+      `<option value="${u.id}" ${u.id === me.id ? 'selected' : ''}>${escapeHtml(u.display_name || u.account)} (${escapeHtml(u.account)})</option>`
+    ).join('');
+
+    render(appShell(`
+      <div class="stack">
+        <div class="card card__pad stack">
+          <div class="field">
+            <span class="field__label">帳本名稱</span>
+            <input id="lName" class="input" placeholder="例：家庭帳、出國旅遊" autofocus />
+          </div>
+
+          <div class="field">
+            <span class="field__label">類型</span>
+            <div class="radio-group">
+              <label class="radio-pill">
+                <input type="radio" name="vis" value="shared" checked />
+                👥 共同編輯
+              </label>
+              <label class="radio-pill">
+                <input type="radio" name="vis" value="private" />
+                🔐 私人
+              </label>
+            </div>
+            <span class="field__hint" id="visHint">所有授權成員都可讀寫；建好後到設定加成員</span>
+          </div>
+
+          <div class="field" id="ownerWrap" style="display:none">
+            <span class="field__label">擁有者（私人帳本）</span>
+            <select id="lOwner" class="select">${ownerOptions}</select>
+            <span class="field__hint">擁有者可以決定要不要讓 admin 看內容</span>
+          </div>
+
+          <details class="advanced" id="advanced">
+            <summary>進階：使用既有 Google Sheet</summary>
+            <div class="stack">
+              <div class="field">
+                <span class="field__label">用法</span>
+                <span class="field__hint">
+                  • 不填 → 系統會在你的 Drive 自動建一份新試算表<br/>
+                  • 填上 → 註冊既有 Sheet（由你或別人事先建好）
+                </span>
+              </div>
+              <div class="field">
+                <span class="field__label">Google Sheet ID（選填）</span>
+                <input id="lSheetId" class="input" placeholder="貼網址中 /spreadsheets/d/ 後面那串" />
+                <span class="field__hint" id="shareHint">
+                  ⚠️ 若是別人帳號的 Sheet，對方須先把 Sheet 分享給<br/>
+                  <span class="copy-chip">bolin131419@gmail.com</span> 並給<b>編輯者</b>權限
+                </span>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <button id="createBtn" class="btn btn--primary btn--lg btn--block">建立帳本</button>
+        <button class="btn btn--ghost btn--block" onclick="history.back()">取消</button>
+      </div>
+    `, { title: '建立新帳本', back: true }));
+
+    // 切換 visibility 時：顯示/隱藏 owner 選單，調整提示文案
+    document.querySelectorAll('input[name="vis"]').forEach(r => {
+      r.onchange = () => {
+        const isPrivate = document.querySelector('input[name="vis"]:checked').value === 'private';
+        document.getElementById('ownerWrap').style.display = isPrivate ? '' : 'none';
+        document.getElementById('visHint').textContent = isPrivate
+          ? '只有指定擁有者可讀寫；admin 預設看不到內容'
+          : '所有授權成員都可讀寫；建好後到設定加成員';
+      };
+    });
+
+    document.getElementById('createBtn').onclick = async () => {
+      const name = document.getElementById('lName').value.trim();
+      if (!name) return toast('請輸入帳本名稱', 'error');
+      const visibility = document.querySelector('input[name="vis"]:checked').value;
+      const owner_user_id = visibility === 'private'
+        ? document.getElementById('lOwner').value
+        : me.id;
+      const google_sheet_id = document.getElementById('lSheetId').value.trim();
+
+      const btn = document.getElementById('createBtn');
+      btn.disabled = true; btn.textContent = '建立中…';
+      try {
+        await api('create_sheet', {
+          name, visibility, owner_user_id,
+          google_sheet_id: google_sheet_id || undefined
+        });
+        toast('建立成功 ✨', 'success');
+        state.cache.sheets = null;
+        navigate('home');
+      } catch (e) {
+        toast('失敗：' + friendlyErr(e.message), 'error');
+        btn.disabled = false; btn.textContent = '建立帳本';
+      }
+    };
+  }
 
   // =====================================================================
   // 11. 頁面：手動 URL 設定（緊急覆寫）
