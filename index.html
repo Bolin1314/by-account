@@ -817,11 +817,9 @@
     render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: ledger.name, back: true }));
     let res, cats, accts;
     try {
-      [res, cats, accts] = await Promise.all([
-        api('list_records',    { sheet_id: ledger.id, year, month, limit: 500 }),
-        api('list_categories', { sheet_id: ledger.id }),
-        api('list_accounts',   { sheet_id: ledger.id })
-      ]);
+      // 一次拿 records + categories + accounts，省 2 次 round trip
+      const data = await api('list_ledger_view', { sheet_id: ledger.id, year, month, limit: 500 });
+      res = data.records; cats = data.categories; accts = data.accounts;
       state.cache.categories = cats; state.cache.accounts = accts;
     } catch (e) {
       if (tk !== _routeToken) return;
