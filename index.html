@@ -577,12 +577,16 @@
   // =====================================================================
   // 4. Router
   // =====================================================================
+  // 每次路由換頁時 ++，async 頁面函式在 await 後檢查還是不是當前 token，
+  // 不是就放棄 render，避免「舊頁的 fetch 回來把新頁畫面蓋掉」。
+  let _routeToken = 0;
   function navigate(page, params) {
     state.page = page;
     location.hash = '#' + page + (params ? '?' + new URLSearchParams(params) : '');
     routeFromHash();
   }
   function routeFromHash() {
+    _routeToken++;
     const raw = location.hash.replace(/^#/, '') || 'home';
     const [page, query] = raw.split('?');
     const params = Object.fromEntries(new URLSearchParams(query || ''));
@@ -742,14 +746,17 @@
   // 7. 頁面：首頁（帳本列表）
   // =====================================================================
   async function pageHome() {
+    const tk = _routeToken;
     render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: '我的帳本' }));
     let sheets;
     try {
       sheets = await api('list_my_sheets');
       state.cache.sheets = sheets;
     } catch (e) {
+      if (tk !== _routeToken) return;
       return render(appShell(`<div class="card card__pad" style="color:var(--brick)">載入失敗：${escapeHtml(friendlyErr(e.message))}</div>`, { title: '我的帳本' }));
     }
+    if (tk !== _routeToken) return;
     const u = state.user || {};
     const greet = `
       <div class="greet">
@@ -801,6 +808,7 @@
   // =====================================================================
   async function pageLedger(params) {
     if (!state.ledger) return navigate('home');
+    const tk = _routeToken;
     const ledger = state.ledger;
     const now = new Date();
     const year  = Number(params.year)  || now.getFullYear();
@@ -816,8 +824,10 @@
       ]);
       state.cache.categories = cats; state.cache.accounts = accts;
     } catch (e) {
+      if (tk !== _routeToken) return;
       return render(appShell(`<div class="card card__pad" style="color:var(--brick)">載入失敗：${escapeHtml(friendlyErr(e.message))}</div>`, { title: ledger.name, back: true }));
     }
+    if (tk !== _routeToken) return;
 
     const catMap = {}; cats.forEach(c => catMap[c.id] = c);
     const acctMap = {}; accts.forEach(a => acctMap[a.id] = a);
@@ -911,6 +921,7 @@
       `, { title: '記帳' }));
     }
     let cats = state.cache.categories, accts = state.cache.accounts;
+    const tk = _routeToken;
     if (!cats || !accts) {
       render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: '記帳' }));
       try {
@@ -920,8 +931,10 @@
         ]);
         state.cache.categories = cats; state.cache.accounts = accts;
       } catch (e) {
+        if (tk !== _routeToken) return;
         return render(appShell(`<div class="card card__pad" style="color:var(--brick)">${escapeHtml(friendlyErr(e.message))}</div>`, { title: '記帳' }));
       }
+      if (tk !== _routeToken) return;
     }
 
     const expCats = cats.filter(c => c.type === 'expense');
@@ -1141,6 +1154,7 @@
   // 10.5 頁面：建立新帳本
   // =====================================================================
   async function pageNewLedger() {
+    const tk = _routeToken;
     const me = state.user || {};
     const isAdmin = me.role === 'super_admin' || me.role === 'admin';
     if (!isAdmin) {
@@ -1153,12 +1167,17 @@
       `, { title: '建立帳本', back: true }));
     }
 
-    // 先載入使用者清單（用於 owner 選單）
+    // 立即顯示 loading 狀態（避免畫面卡在前一頁）
+    render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: '建立新帳本', back: true }));
+
+    // 載入使用者清單（用於 owner 選單）
     let users = [];
     try {
       users = await api('list_users');
       users = users.filter(u => u.status === 'active');
     } catch(e) { users = [{ id: me.id, account: me.account, display_name: me.display_name }]; }
+
+    if (tk !== _routeToken) return;  // 使用者已切到別頁，放棄渲染
 
     const ownerOptions = users.map(u =>
       `<option value="${u.id}" ${u.id === me.id ? 'selected' : ''}>${escapeHtml(u.display_name || u.account)} (${escapeHtml(u.account)})</option>`
