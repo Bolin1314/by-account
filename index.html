@@ -490,10 +490,11 @@
   // =====================================================================
   const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwoTAXj1rnwLjaXoZhLrYGTE7CCpxHmVFwrSeNS3W16zIjHmv2yV9znPrvn-ey8UOoy1w/exec';
 
-  const LS_URL    = 'by_account:web_app_url';
-  const LS_TOKEN  = 'by_account:session_token';
-  const LS_USER   = 'by_account:user';
-  const LS_LEDGER = 'by_account:current_ledger';
+  const LS_URL     = 'by_account:web_app_url';
+  const LS_TOKEN   = 'by_account:session_token';
+  const LS_USER    = 'by_account:user';
+  const LS_LEDGER  = 'by_account:current_ledger';
+  const LS_EXPIRES = 'by_account:expires_at';
 
   const state = {
     url:    localStorage.getItem(LS_URL) || WEB_APP_URL,
@@ -507,7 +508,46 @@
   function setToken(v) { state.token = v; localStorage.setItem(LS_TOKEN, v); }
   function setUser(v)  { state.user = v; localStorage.setItem(LS_USER, JSON.stringify(v)); }
   function setLedger(v){ state.ledger = v; localStorage.setItem(LS_LEDGER, JSON.stringify(v)); state.cache.accounts = state.cache.categories = null; }
-  function clearAuth() { setToken(''); setUser(null); setLedger(null); state.cache = { sheets: null, accounts: null, categories: null }; }
+  function setExpiresAt(iso) {
+    if (iso) localStorage.setItem(LS_EXPIRES, iso);
+    else localStorage.removeItem(LS_EXPIRES);
+    scheduleExpiryCheck();
+  }
+  function clearAuth() {
+    setToken(''); setUser(null); setLedger(null); setExpiresAt(null);
+    state.cache = { sheets: null, accounts: null, categories: null };
+  }
+
+  // ============ 自動登出機制 ============
+  let _expiryTimer = null;
+  function scheduleExpiryCheck() {
+    if (_expiryTimer) { clearTimeout(_expiryTimer); _expiryTimer = null; }
+    const iso = localStorage.getItem(LS_EXPIRES);
+    if (!iso || !state.token) return;
+    const ms = new Date(iso).getTime() - Date.now();
+    if (ms <= 0) { handleSessionExpired('local'); return; }
+    // setTimeout 上限 ~24.8 天，clamp 一下
+    _expiryTimer = setTimeout(() => handleSessionExpired('timer'), Math.min(ms, 2_000_000_000));
+  }
+  function handleSessionExpired(reason) {
+    if (!state.token && !localStorage.getItem(LS_TOKEN)) return;
+    clearAuth();
+    toast('登入已逾時，請重新登入', 'error');
+    navigate('login');
+  }
+  // 分頁從背景喚醒時重新檢查（避免 setTimeout 在 sleep 時失效）
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') scheduleExpiryCheck();
+  });
+  // 多分頁同步：別的分頁登出 → 本分頁也跟著踢回 login
+  window.addEventListener('storage', (e) => {
+    if (e.key === LS_TOKEN && !e.newValue && state.token) {
+      state.token = ''; state.user = null;
+      toast('已從其他分頁登出', 'error');
+      navigate('login');
+    }
+    if (e.key === LS_EXPIRES) scheduleExpiryCheck();
+  });
 
   // =====================================================================
   // 2. API
@@ -523,8 +563,7 @@
     const json = await res.json().catch(() => ({ ok: false, error: 'bad_response' }));
     if (!json.ok) {
       if (['invalid_session','session_expired','not_logged_in'].includes(json.error)) {
-        clearAuth();
-        navigate('login');
+        handleSessionExpired('api');
       }
       throw new Error(json.error || json.message || '未知錯誤');
     }
@@ -717,7 +756,7 @@
     btn.disabled = true; btn.textContent = '登入中…';
     try {
       const r = await api('login', { account, password, remember_me: remember, user_agent: navigator.userAgent });
-      setToken(r.session_token); setUser(r.user);
+      setToken(r.session_token); setUser(r.user); setExpiresAt(r.expires_at);
       toast('歡迎回來，' + (r.user.display_name || r.user.account), 'success');
       navigate('home');
     } catch (e) {
@@ -1317,6 +1356,7 @@
       navigator.serviceWorker.register('service-worker.js').catch(() => {});
     });
   }
+  scheduleExpiryCheck();   // 載入時若已過期，立即踢回 login
   routeFromHash();
   </script>
 </body>
