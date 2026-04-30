@@ -13,6 +13,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="by_account" />
   <style>
+    /* =============== Font: jf-openhuninn 粉圓（繁中手寫風） =============== */
+    @font-face {
+      font-family: 'jf-openhuninn';
+      src: url('https://cdn.jsdelivr.net/gh/justfont/open-huninn-font@v2.1/jf-openhuninn-2.1.ttf') format('truetype');
+      font-weight: 100 900;
+      font-display: swap;
+    }
+
     /* =============== Design Tokens =============== */
     :root {
       --warm-bg:    #FAF7F2;
@@ -56,10 +64,11 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "PingFang TC",
-                   "Microsoft JhengHei", "Helvetica Neue", Arial, sans-serif;
+      font-family: 'jf-openhuninn', -apple-system, BlinkMacSystemFont,
+                   "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+                   "Helvetica Neue", Arial, sans-serif;
       font-size: 16px;
-      line-height: 1.5;
+      line-height: 1.6;
       color: var(--ink);
       background: var(--warm-bg);
       -webkit-font-smoothing: antialiased;
