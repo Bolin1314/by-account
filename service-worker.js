@@ -1,12 +1,15 @@
 // by_account · Service Worker (PWA L1)
 // 策略：靜態檔 cache-first；API（POST 到 Apps Script）一律 network-only。
 
-const CACHE = 'by_account-v0.2.4';
+const CACHE = 'by_account-v0.3.0';
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './icons/favicon.svg'
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/apple-touch-icon.png',
+  './icons/favicon-32.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -33,7 +36,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
 
-  // 第三方（Tailwind CDN 等）→ 網路優先，失敗 fallback cache
+  // 第三方 → 網路優先，失敗 fallback cache
   if (url.origin !== self.location.origin) {
     event.respondWith(
       fetch(req)

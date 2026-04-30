@@ -6,7 +6,12 @@
   <meta name="theme-color" content="#FAF7F2" />
   <title>by_account · 記帳</title>
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" href="icons/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="by_account" />
   <style>
     /* =============== Design Tokens =============== */
     :root {
@@ -226,11 +231,15 @@
 
     /* =============== Logo =============== */
     .logo {
-      width: 76px; height: 76px; border-radius: 22px;
+      width: 88px; height: 88px; border-radius: 22px;
       background: linear-gradient(135deg, var(--honey-l) 0%, #FFE2A8 100%);
       display: inline-flex; align-items: center; justify-content: center;
       font-size: 38px; font-weight: 800; color: var(--honey-d);
       box-shadow: 0 6px 18px rgba(226,154,45,.30);
+    }
+    .logo--img {
+      padding: 0; background: var(--honey-l);
+      object-fit: cover;
     }
 
     /* =============== Login =============== */
@@ -720,7 +729,7 @@
       <div class="center-page">
         <div class="card login-card">
           <div class="login-hero">
-            <div class="logo">$</div>
+            <img src="icons/icon-192.png" alt="logo" class="logo logo--img" />
             <div class="login-hero__title">by_account</div>
             <div class="login-hero__sub">輕鬆管帳，安心生活 ✨</div>
           </div>
