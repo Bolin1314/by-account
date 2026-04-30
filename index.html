@@ -365,6 +365,20 @@
       background: var(--honey-l); color: var(--honey-d);
       display: flex; align-items: center; justify-content: center;
       font-size: 26px; font-weight: 700;
+      overflow: hidden; flex-shrink: 0;
+      position: relative;
+    }
+    .profile__avatar img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .profile__avatar--clickable { cursor: pointer; transition: transform .15s; }
+    .profile__avatar--clickable:active { transform: scale(.95); }
+    .profile__avatar--clickable::after {
+      content: '✏️'; position: absolute; bottom: -2px; right: -2px;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--surface); border: 2px solid var(--warm-bg);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px;
     }
     .profile__name { font-size: 17px; font-weight: 700; }
     .profile__meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
@@ -504,6 +518,7 @@
   const LS_USER    = 'by_account:user';
   const LS_LEDGER  = 'by_account:current_ledger';
   const LS_EXPIRES = 'by_account:expires_at';
+  const LS_AVATAR  = 'by_account:avatar';
 
   const state = {
     url:    localStorage.getItem(LS_URL) || WEB_APP_URL,
@@ -612,13 +627,74 @@
     return String(s == null ? '' : s).replace(/[&<>"']/g, m =>
       ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   }
+
+  // ============ 大頭貼（per-device，存於 localStorage） ============
+  function getAvatar() { return localStorage.getItem(LS_AVATAR) || ''; }
+  function setAvatar(v) {
+    if (v) localStorage.setItem(LS_AVATAR, v);
+    else localStorage.removeItem(LS_AVATAR);
+  }
+  function avatarHtml(u) {
+    const av = getAvatar();
+    if (av) return `<img src="${av}" alt="" />`;
+    const init = (u && (u.display_name || u.account) || '?').slice(0, 1).toUpperCase();
+    return escapeHtml(init);
+  }
+  function resizeToDataUrl(file, maxSize, quality) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = () => { img.src = reader.result; };
+      reader.onerror = reject;
+      img.onload = () => {
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = maxSize;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, maxSize, maxSize);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+  function pickAvatar() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) return toast('請選圖片檔', 'error');
+      if (file.size > 10 * 1024 * 1024) return toast('檔案太大（>10MB）', 'error');
+      try {
+        const dataUrl = await resizeToDataUrl(file, 256, 0.85);
+        setAvatar(dataUrl);
+        toast('已更新大頭貼 ✨', 'success');
+        if (state.page === 'settings') pageSettings();
+      } catch (e) {
+        toast('讀取圖片失敗', 'error');
+      }
+    };
+    input.click();
+  }
+  function resetAvatar() {
+    if (!confirm('確定移除大頭貼？')) return;
+    setAvatar('');
+    toast('已移除大頭貼', 'success');
+    if (state.page === 'settings') pageSettings();
+  }
+  window.pickAvatar = pickAvatar;
+  window.resetAvatar = resetAvatar;
   function greetingHi() {
     const h = new Date().getHours();
     if (h < 5)  return '🌙 夜深了';
     if (h < 11) return '🌅 早安';
     if (h < 14) return '🍱 午安';
     if (h < 18) return '☕ 午後好';
-    if (h < 22) return '🌆 晚安';
+    if (h < 22) return '🌙 晚安';
     return '🌙 夜深了';
   }
 
@@ -692,12 +768,11 @@
   }
   function showMenu() {
     const u = state.user || {};
-    const init = (u.display_name || u.account || '?').slice(0,1).toUpperCase();
     const html = `
       <div class="overlay" id="overlay">
         <aside class="side-menu" onclick="event.stopPropagation()">
           <div class="side-menu__user">
-            <div class="profile__avatar" style="width:48px;height:48px;font-size:22px;border-radius:14px">${escapeHtml(init)}</div>
+            <div class="profile__avatar" style="width:48px;height:48px;font-size:22px;border-radius:14px">${avatarHtml(u)}</div>
             <div>
               <div style="font-weight:700">${escapeHtml(u.display_name || u.account || '')}</div>
               <div style="font-size:12px;color:var(--muted)">${escapeHtml(u.role || '')}</div>
@@ -1115,14 +1190,15 @@
   async function pageSettings() {
     const u = state.user || {};
     const isAdmin = u.role === 'super_admin' || u.role === 'admin';
-    const init = (u.display_name || u.account || '?').slice(0,1).toUpperCase();
+    const hasAvatar = !!getAvatar();
     render(appShell(`
       <div class="stack">
         <div class="card profile">
-          <div class="profile__avatar">${escapeHtml(init)}</div>
+          <button class="profile__avatar profile__avatar--clickable" onclick="pickAvatar()" aria-label="更換大頭貼" style="border:none">${avatarHtml(u)}</button>
           <div class="grow">
             <div class="profile__name">${escapeHtml(u.display_name || '')}</div>
             <div class="profile__meta">${escapeHtml(u.account || '')} · <span class="chip chip--soft">${escapeHtml(u.role || '')}</span></div>
+            ${ hasAvatar ? '<button onclick="resetAvatar()" style="font-size:11px;color:var(--muted);text-decoration:underline;text-underline-offset:2px;margin-top:4px">移除大頭貼</button>' : '<div style="font-size:11px;color:var(--muted);margin-top:4px">點頭像可上傳照片</div>' }
           </div>
         </div>
 
