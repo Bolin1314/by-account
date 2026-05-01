@@ -1,7 +1,7 @@
 // by_account · Service Worker (PWA L1)
 // 策略：靜態檔 cache-first；API（POST 到 Apps Script）一律 network-only。
 
-const CACHE = 'by_account-v0.5.0';
+const CACHE = 'by_account-v0.5.1';
 const ASSETS = [
   './',
   './index.html',
@@ -30,6 +30,9 @@ const ASSETS = [
   './icons/cat-transport.png',
   './icons/cat-shopping.png',
   './icons/cat-home.png',
+  './icons/cat-medical.png',
+  './icons/cat-entertainment.png',
+  './icons/cat-other.png',
   './icons/cat-salary.png',
   './icons/cat-bonus.png',
   './icons/cat-other-income.png'
