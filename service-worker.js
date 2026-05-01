@@ -1,7 +1,7 @@
 // by_account · Service Worker (PWA L1)
 // 策略：靜態檔 cache-first；API（POST 到 Apps Script）一律 network-only。
 
-const CACHE = 'by_account-v0.5.2';
+const CACHE = 'by_account-v0.6.0';
 const ASSETS = [
   './',
   './index.html',
@@ -35,7 +35,17 @@ const ASSETS = [
   './icons/cat-other.png',
   './icons/cat-salary.png',
   './icons/cat-bonus.png',
-  './icons/cat-other-income.png'
+  './icons/cat-other-income.png',
+  './icons/loading.png',
+  './icons/back.png',
+  './icons/menu.png',
+  './icons/logout.png',
+  './icons/connection.png',
+  './icons/users.png',
+  './icons/warning.png',
+  './icons/save.png',
+  './icons/edit.png',
+  './icons/forbidden.png'
 ];
 
 self.addEventListener('install', (event) => {

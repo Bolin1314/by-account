@@ -392,11 +392,10 @@
     .profile__avatar--clickable { cursor: pointer; transition: transform .15s; }
     .profile__avatar--clickable:active { transform: scale(.95); }
     .profile__avatar--clickable::after {
-      content: '✏️'; position: absolute; bottom: -2px; right: -2px;
-      width: 22px; height: 22px; border-radius: 50%;
-      background: var(--surface); border: 2px solid var(--warm-bg);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 11px;
+      content: ''; position: absolute; bottom: -2px; right: -2px;
+      width: 24px; height: 24px; border-radius: 50%;
+      background: var(--surface) url('icons/edit.png') center / 18px no-repeat;
+      border: 2px solid var(--warm-bg);
     }
     .profile__name { font-size: 17px; font-weight: 700; }
     .profile__meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
@@ -528,6 +527,16 @@
 
     /* 空狀態大圖 */
     .empty__img { width: 180px; height: 180px; object-fit: contain; margin: 0 auto; }
+    .empty__img--loading { width: 120px; height: 120px; animation: bounce 1.6s ease-in-out infinite; }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-8px); }
+    }
+    /* 行內小 icon（可放 button 文字旁） */
+    .icon-inline { display: inline-block; vertical-align: -5px; width: 22px; height: 22px; object-fit: contain; }
+    .icon-inline-sm { width: 18px; height: 18px; }
+    /* header 圓鈕內的圖 */
+    .btn--icon img { width: 22px; height: 22px; object-fit: contain; }
 
     /* 問候語小圖 */
     .greet__icon { display: inline-block; vertical-align: -8px; width: 32px; height: 32px; object-fit: contain; margin-right: 2px; }
@@ -695,6 +704,19 @@
     if (s.visibility === 'private') return 'icons/ledger-private.png';
     return 'icons/ledger-shared.png';
   }
+  // Phase 4 雜項
+  const MISC_ICONS = {
+    loading:    'icons/loading.png',
+    back:       'icons/back.png',
+    menu:       'icons/menu.png',
+    logout:     'icons/logout.png',
+    connection: 'icons/connection.png',
+    users:      'icons/users.png',
+    warning:    'icons/warning.png',
+    save:       'icons/save.png',
+    edit:       'icons/edit.png',
+    forbidden:  'icons/forbidden.png'
+  };
   function imgTag(src, alt) {
     return `<img src="${src}" alt="${alt || ''}" />`;
   }
@@ -811,7 +833,7 @@
   // =====================================================================
   function appShell(content, opts = {}) {
     const back = opts.back
-      ? `<button class="btn--icon" onclick="history.back()" aria-label="返回">←</button>`
+      ? `<button class="btn--icon" onclick="history.back()" aria-label="返回"><img src="icons/back.png" alt="" /></button>`
       : `<div style="width:40px"></div>`;
     return `
       <div class="app">
@@ -819,7 +841,7 @@
           <div class="app__header-inner">
             ${back}
             <div class="app__title">${escapeHtml(opts.title || 'by_account')}</div>
-            <button class="btn--icon" onclick="showMenu()" aria-label="選單">⋮</button>
+            <button class="btn--icon" onclick="showMenu()" aria-label="選單"><img src="icons/menu.png" alt="" /></button>
           </div>
         </header>
         <main class="app__main">${content}</main>
@@ -860,7 +882,7 @@
             </div>
           </div>
           <button class="side-menu__btn" onclick="goAndCloseMenu('settings')">⚙️ <span>設定</span></button>
-          <button class="side-menu__btn side-menu__btn--danger" onclick="logout()">🚪 <span>登出</span></button>
+          <button class="side-menu__btn side-menu__btn--danger" onclick="logout()"><img class="icon-inline" src="icons/logout.png" alt="" /> <span>登出</span></button>
           <div class="side-menu__footer">by_account · v0.1</div>
         </aside>
       </div>
@@ -951,7 +973,7 @@
   // =====================================================================
   async function pageHome() {
     const tk = _routeToken;
-    render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: '我的帳本' }));
+    render(appShell(`<div class="empty"><img class="empty__img empty__img--loading" src="icons/loading.png" alt="" /><div class="empty__hint">讀取中…</div></div>`, { title: '我的帳本' }));
     let sheets;
     try {
       sheets = await api('list_my_sheets');
@@ -1018,7 +1040,7 @@
     const year  = Number(params.year)  || now.getFullYear();
     const month = Number(params.month) || (now.getMonth()+1);
 
-    render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: ledger.name, back: true }));
+    render(appShell(`<div class="empty"><img class="empty__img empty__img--loading" src="icons/loading.png" alt="" /><div class="empty__hint">讀取中…</div></div>`, { title: ledger.name, back: true }));
     let res, cats, accts;
     try {
       // 一次拿 records + categories + accounts + user_names
@@ -1077,7 +1099,7 @@
           </div>
         </div>
       </div>
-      ${ res.is_admin_view ? '<div class="notice">⚠️ 你正以 admin 身分檢視，動作已記錄囉。</div>' : '' }
+      ${ res.is_admin_view ? '<div class="notice"><img class="icon-inline-sm" src="icons/warning.png" alt="" /> 你正以 admin 身分檢視，動作已記錄囉。</div>' : '' }
       ${list}
     `, { title: ledger.name, back: true }));
   }
@@ -1137,7 +1159,7 @@
     let cats = state.cache.categories, accts = state.cache.accounts;
     const tk = _routeToken;
     if (!cats || !accts) {
-      render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: '記帳' }));
+      render(appShell(`<div class="empty"><img class="empty__img empty__img--loading" src="icons/loading.png" alt="" /><div class="empty__hint">讀取中…</div></div>`, { title: '記帳' }));
       try {
         [cats, accts] = await Promise.all([
           api('list_categories', { sheet_id: state.ledger.id }),
@@ -1202,7 +1224,7 @@
           </div>
         </div>
 
-        <button id="saveBtn" class="btn btn--primary btn--lg btn--block">💾 儲存</button>
+        <button id="saveBtn" class="btn btn--primary btn--lg btn--block"><img class="icon-inline" src="icons/save.png" alt="" /> 儲存</button>
       </div>
     `, { title: '記帳', back: true }));
 
@@ -1276,7 +1298,7 @@
         navigate('ledger', { id: state.ledger.id });
       } catch (e) {
         toast('儲存失敗：' + friendlyErr(e.message), 'error');
-        btn.disabled = false; btn.textContent = '💾 儲存';
+        btn.disabled = false; btn.innerHTML = '<img class="icon-inline" src="icons/save.png" alt="" /> 儲存';
       }
     };
   }
@@ -1313,7 +1335,7 @@
     let accts = state.cache.accounts;
 
     if (!rec || !cats || !accts) {
-      render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: '編輯', back: true }));
+      render(appShell(`<div class="empty"><img class="empty__img empty__img--loading" src="icons/loading.png" alt="" /><div class="empty__hint">讀取中…</div></div>`, { title: '編輯', back: true }));
       try {
         const data = await api('list_ledger_view', { sheet_id: state.ledger.id, limit: 1000 });
         if (tk !== _routeToken) return;
@@ -1386,7 +1408,7 @@
           </div>
         </div>
 
-        <button id="saveBtn" class="btn btn--primary btn--lg btn--block">💾 儲存修改</button>
+        <button id="saveBtn" class="btn btn--primary btn--lg btn--block"><img class="icon-inline" src="icons/save.png" alt="" /> 儲存修改</button>
         <button id="deleteBtn" class="btn btn--danger btn--block">🗑️ 刪除這筆</button>
         <button class="btn btn--ghost btn--block" onclick="history.back()">取消</button>
       </div>
@@ -1466,7 +1488,7 @@
         navigate('ledger', { id: state.ledger.id });
       } catch (e) {
         toast('儲存失敗：' + friendlyErr(e.message), 'error');
-        btn.disabled = false; btn.textContent = '💾 儲存修改';
+        btn.disabled = false; btn.innerHTML = '<img class="icon-inline" src="icons/save.png" alt="" /> 儲存修改';
       }
     };
 
@@ -1509,7 +1531,7 @@
               <span class="list-item__chev">›</span>
             </button>
             <button class="list-item" onclick="alert('使用者管理 v0.2 再加 UI；目前可用 API create_user')">
-              <span class="list-item__icon">👤</span>
+              <span class="list-item__icon"><img class="icon-inline" src="icons/users.png" alt="" /></span>
               <span class="list-item__label">使用者管理（v0.2）</span>
               <span class="list-item__chev">›</span>
             </button>
@@ -1547,7 +1569,7 @@
 
         <div class="card">
           <button class="list-item list-item--danger" onclick="logout()">
-            <span class="list-item__icon">🚪</span>
+            <span class="list-item__icon"><img class="icon-inline" src="icons/logout.png" alt="" /></span>
             <span class="list-item__label">登出</span>
           </button>
         </div>
@@ -1581,7 +1603,7 @@
     if (!isAdmin) {
       return render(appShell(`
         <div class="card empty">
-          <div class="empty__icon">🚫</div>
+          <img class="empty__img" src="icons/forbidden.png" alt="" />
           <div class="empty__title">沒有權限</div>
           <div class="empty__hint">只有管理員可以建立帳本</div>
         </div>
@@ -1589,7 +1611,7 @@
     }
 
     // 立即顯示 loading 狀態（避免畫面卡在前一頁）
-    render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: '建立新帳本', back: true }));
+    render(appShell(`<div class="empty"><img class="empty__img empty__img--loading" src="icons/loading.png" alt="" /><div class="empty__hint">讀取中…</div></div>`, { title: '建立新帳本', back: true }));
 
     // 載入使用者清單（用於 owner 選單）
     let users = [];
@@ -1705,7 +1727,7 @@
       <div class="center-page">
         <div class="card login-card">
           <div class="login-hero">
-            <div class="logo">🔌</div>
+            <img class="logo logo--img" src="icons/connection.png" alt="" />
             <div class="login-hero__title">變更連線設定</div>
             <div class="login-hero__sub">緊急情況用：覆寫 Apps Script Web App 網址</div>
           </div>
