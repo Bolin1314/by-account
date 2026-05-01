@@ -317,6 +317,9 @@
       display: flex; align-items: center; gap: 12px; padding: 14px 16px;
     }
     .record + .record { border-top: 1px solid var(--line); }
+    .record--btn { width: 100%; text-align: left; transition: background .12s; cursor: pointer; }
+    .record--btn:active { background: var(--soft); }
+    .record--btn:hover { background: var(--soft); }
     .record__icon {
       width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center; font-size: 20px;
@@ -535,12 +538,12 @@
     user:   JSON.parse(localStorage.getItem(LS_USER) || 'null'),
     ledger: JSON.parse(localStorage.getItem(LS_LEDGER) || 'null'),
     page: '',
-    cache: { sheets: null, accounts: null, categories: null }
+    cache: { sheets: null, accounts: null, categories: null, records: null, user_names: null }
   };
   function setUrl(v)   { state.url = v; localStorage.setItem(LS_URL, v); }
   function setToken(v) { state.token = v; localStorage.setItem(LS_TOKEN, v); }
   function setUser(v)  { state.user = v; localStorage.setItem(LS_USER, JSON.stringify(v)); }
-  function setLedger(v){ state.ledger = v; localStorage.setItem(LS_LEDGER, JSON.stringify(v)); state.cache.accounts = state.cache.categories = null; }
+  function setLedger(v){ state.ledger = v; localStorage.setItem(LS_LEDGER, JSON.stringify(v)); state.cache.accounts = state.cache.categories = state.cache.records = null; }
   function setExpiresAt(iso) {
     if (iso) localStorage.setItem(LS_EXPIRES, iso);
     else localStorage.removeItem(LS_EXPIRES);
@@ -730,6 +733,7 @@
       case 'home':        return pageHome();
       case 'ledger':      return pageLedger(params);
       case 'add':         return pageAddRecord();
+      case 'edit':        return pageEditRecord(params);
       case 'settings':    return pageSettings();
       case 'new-ledger':  return pageNewLedger();
       case 'reset-url':   return pageSetupUrl(true);
@@ -949,10 +953,13 @@
     render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: ledger.name, back: true }));
     let res, cats, accts;
     try {
-      // 一次拿 records + categories + accounts，省 2 次 round trip
+      // 一次拿 records + categories + accounts + user_names
       const data = await api('list_ledger_view', { sheet_id: ledger.id, year, month, limit: 500 });
       res = data.records; cats = data.categories; accts = data.accounts;
-      state.cache.categories = cats; state.cache.accounts = accts;
+      state.cache.categories = cats;
+      state.cache.accounts = accts;
+      state.cache.records = res.items;
+      state.cache.user_names = data.user_names || {};
     } catch (e) {
       if (tk !== _routeToken) return;
       return render(appShell(`<div class="card card__pad" style="color:var(--brick)">載入失敗：${escapeHtml(friendlyErr(e.message))}</div>`, { title: ledger.name, back: true }));
@@ -1018,14 +1025,14 @@
       : (cat ? cat.name : '未分類');
     const sub = [r.note, acct && acct.name].filter(Boolean).map(escapeHtml).join(' · ');
     return `
-      <div class="record">
+      <button class="record record--btn" onclick="location.hash='edit?id=${encodeURIComponent(r.id)}'">
         <div class="${iconCls}">${icon}</div>
         <div class="record__body">
           <div class="record__title truncate">${escapeHtml(label)}</div>
           ${sub ? `<div class="record__sub truncate">${sub}</div>` : ''}
         </div>
         <div class="record__amount num ${amtCls}">${sign}${fmtMoney(r.amount, cur)}</div>
-      </div>
+      </button>
     `;
   }
   function changeMonth(y, m, d) {
@@ -1189,6 +1196,204 @@
       } catch (e) {
         toast('儲存失敗：' + friendlyErr(e.message), 'error');
         btn.disabled = false; btn.textContent = '💾 儲存';
+      }
+    };
+  }
+
+  // =====================================================================
+  // 9.5 頁面：編輯記錄
+  // =====================================================================
+  function userNameOf(uid) {
+    if (!uid) return '—';
+    if (String(uid).indexOf('sync:') === 0) return '🔁 ' + uid.slice(5) + ' 同步';
+    const map = state.cache.user_names || {};
+    return map[uid] || '（未知）';
+  }
+  function fmtDateTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    const y = d.getFullYear();
+    const M = String(d.getMonth()+1).padStart(2,'0');
+    const D = String(d.getDate()).padStart(2,'0');
+    const h = String(d.getHours()).padStart(2,'0');
+    const m = String(d.getMinutes()).padStart(2,'0');
+    return `${y}/${M}/${D} ${h}:${m}`;
+  }
+
+  async function pageEditRecord(params) {
+    if (!state.ledger) return navigate('home');
+    const tk = _routeToken;
+    const id = params.id;
+
+    // 取得目標 record；若快取沒有就重新拉
+    let rec = (state.cache.records || []).find(r => r.id === id);
+    let cats = state.cache.categories;
+    let accts = state.cache.accounts;
+
+    if (!rec || !cats || !accts) {
+      render(appShell(`<div class="empty"><div class="empty__icon">⏳</div><div class="empty__hint">讀取中…</div></div>`, { title: '編輯', back: true }));
+      try {
+        const data = await api('list_ledger_view', { sheet_id: state.ledger.id, limit: 1000 });
+        if (tk !== _routeToken) return;
+        cats = data.categories; accts = data.accounts;
+        state.cache.categories = cats; state.cache.accounts = accts;
+        state.cache.records = data.records.items;
+        state.cache.user_names = data.user_names || {};
+        rec = data.records.items.find(r => r.id === id);
+      } catch (e) {
+        if (tk !== _routeToken) return;
+        return render(appShell(`<div class="card card__pad" style="color:var(--brick)">${escapeHtml(friendlyErr(e.message))}</div>`, { title: '編輯', back: true }));
+      }
+    }
+    if (!rec) {
+      return render(appShell(`<div class="card empty"><div class="empty__icon">🔍</div><div class="empty__title">找不到這筆記錄</div></div>`, { title: '編輯', back: true }));
+    }
+
+    const expCats = cats.filter(c => c.type === 'expense');
+    const incCats = cats.filter(c => c.type === 'income');
+    const isEdited = rec.updated_at && rec.created_at && rec.updated_at !== rec.created_at;
+
+    render(appShell(`
+      <div class="stack">
+        <div class="card card__pad-sm row" style="gap:12px">
+          <div class="record__icon">📒</div>
+          <div class="grow">
+            <div style="font-size:11px;color:var(--muted)">編輯記錄 · ${escapeHtml(state.ledger.name)}</div>
+            <div style="font-size:11px;color:var(--muted/70);margin-top:2px">
+              建立：${fmtDateTime(rec.created_at)} · ${escapeHtml(userNameOf(rec.created_by))}
+              ${ isEdited ? `<br/>修改：${fmtDateTime(rec.updated_at)} · ${escapeHtml(userNameOf(rec.updated_by))}` : '' }
+            </div>
+          </div>
+        </div>
+
+        <div class="type-tabs">
+          <button class="type-tab t-expense  ${rec.type==='expense'?'is-active':''}" data-type="expense">💸 支出</button>
+          <button class="type-tab t-income   ${rec.type==='income' ?'is-active':''}" data-type="income">💰 收入</button>
+          <button class="type-tab t-transfer ${rec.type==='transfer'?'is-active':''}" data-type="transfer">🔄 轉帳</button>
+        </div>
+
+        <div class="card card__pad stack">
+          <input id="amount" class="input input--amount" inputmode="decimal" placeholder="0" value="${rec.amount}" />
+          <div class="field">
+            <span class="field__label">日期</span>
+            <input id="date" class="input" type="date" value="${escapeHtml(rec.date)}" />
+          </div>
+
+          <div id="catWrap" class="field ${rec.type==='transfer'?'hidden':''}">
+            <span class="field__label">類別</span>
+            <div id="catGrid" class="cat-grid"></div>
+          </div>
+
+          <div class="field">
+            <span class="field__label" id="acctLabel">${rec.type==='transfer'?'轉出帳戶':'帳戶'}</span>
+            <select id="acct" class="select">
+              ${accts.map(a => `<option value="${a.id}" ${a.id===rec.account_id?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}
+            </select>
+          </div>
+
+          <div id="acct2Wrap" class="field ${rec.type==='transfer'?'':'hidden'}">
+            <span class="field__label">轉入帳戶</span>
+            <select id="acct2" class="select">
+              ${accts.map(a => `<option value="${a.id}" ${a.id===rec.transfer_to_account_id?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="field">
+            <span class="field__label">備註</span>
+            <textarea id="note" class="textarea" rows="2" placeholder="備註（選填）">${escapeHtml(rec.note || '')}</textarea>
+          </div>
+        </div>
+
+        <button id="saveBtn" class="btn btn--primary btn--lg btn--block">💾 儲存修改</button>
+        <button id="deleteBtn" class="btn btn--danger btn--block">🗑️ 刪除這筆</button>
+        <button class="btn btn--ghost btn--block" onclick="history.back()">取消</button>
+      </div>
+    `, { title: '編輯記錄', back: true }));
+
+    // 重用 add 頁面的類別 grid 邏輯
+    let curType = rec.type;
+    let curCatId = rec.category_id;
+
+    function paintCats() {
+      const list = curType === 'income' ? incCats : (curType === 'expense' ? expCats : []);
+      const wrap = document.getElementById('catWrap');
+      const a2 = document.getElementById('acct2Wrap');
+      const acctLabel = document.getElementById('acctLabel');
+      if (curType === 'transfer') {
+        wrap.classList.add('hidden'); a2.classList.remove('hidden');
+        acctLabel.textContent = '轉出帳戶'; return;
+      }
+      wrap.classList.remove('hidden'); a2.classList.add('hidden');
+      acctLabel.textContent = '帳戶';
+      const grid = document.getElementById('catGrid');
+      grid.innerHTML = list.map(c => `
+        <button class="cat-tile ${c.id===curCatId?'is-active':''}" data-cid="${c.id}">
+          <span class="cat-tile__icon">${c.icon || '•'}</span>
+          <span class="cat-tile__name">${escapeHtml(c.name)}</span>
+        </button>
+      `).join('');
+      grid.querySelectorAll('.cat-tile').forEach(b => {
+        b.onclick = () => {
+          curCatId = b.dataset.cid;
+          grid.querySelectorAll('.cat-tile').forEach(x => x.classList.remove('is-active'));
+          b.classList.add('is-active');
+        };
+      });
+    }
+    paintCats();
+
+    document.querySelectorAll('.type-tab').forEach(b => {
+      b.onclick = () => {
+        curType = b.dataset.type;
+        document.querySelectorAll('.type-tab').forEach(x => x.classList.remove('is-active'));
+        b.classList.add('is-active');
+        paintCats();
+      };
+    });
+
+    document.getElementById('saveBtn').onclick = async () => {
+      const amount = Number(document.getElementById('amount').value);
+      const date = document.getElementById('date').value;
+      const account_id = document.getElementById('acct').value;
+      const note = document.getElementById('note').value;
+      if (!amount || amount <= 0) return toast('金額還沒填上喔', 'error');
+      if (!date) return toast('請選日期', 'error');
+      const payload = {
+        sheet_id: state.ledger.id,
+        record_id: rec.id,
+        type: curType,
+        amount, date, account_id, note,
+        category_id: curType === 'transfer' ? '' : (curCatId || ''),
+        transfer_to_account_id: curType === 'transfer' ? document.getElementById('acct2').value : ''
+      };
+      if (curType === 'transfer' && payload.account_id === payload.transfer_to_account_id)
+        return toast('同一帳戶不可互轉', 'error');
+      if ((curType === 'expense' || curType === 'income') && !curCatId)
+        return toast('請選類別', 'error');
+
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = true; btn.textContent = '儲存中…';
+      try {
+        await api('update_record', payload);
+        toast('已儲存修改 ✨', 'success');
+        state.cache.records = null;  // 強制下次重抓
+        navigate('ledger', { id: state.ledger.id });
+      } catch (e) {
+        toast('儲存失敗：' + friendlyErr(e.message), 'error');
+        btn.disabled = false; btn.textContent = '💾 儲存修改';
+      }
+    };
+
+    document.getElementById('deleteBtn').onclick = async () => {
+      if (!confirm('確定刪除這筆記錄？\n刪除後可從主控 Sheet 還原（清空 deleted_at 欄位）。')) return;
+      try {
+        await api('delete_record', { sheet_id: state.ledger.id, record_id: rec.id });
+        toast('已刪除', 'success');
+        state.cache.records = null;
+        navigate('ledger', { id: state.ledger.id });
+      } catch (e) {
+        toast('刪除失敗：' + friendlyErr(e.message), 'error');
       }
     };
   }
