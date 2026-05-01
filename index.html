@@ -317,9 +317,14 @@
       display: flex; align-items: center; gap: 12px; padding: 14px 16px;
     }
     .record + .record { border-top: 1px solid var(--line); }
-    .record--btn { width: 100%; text-align: left; transition: background .12s; cursor: pointer; }
+    .record--btn { width: 100%; text-align: left; transition: background .12s; cursor: pointer; border: none; background: transparent; }
     .record--btn:active { background: var(--soft); }
     .record--btn:hover { background: var(--soft); }
+    .record__chev {
+      color: var(--muted-2); font-size: 22px; margin-left: 4px; line-height: 1;
+      flex-shrink: 0;
+    }
+    .record--btn:hover .record__chev { color: var(--honey-d); }
     .record__icon {
       width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center; font-size: 20px;
@@ -1025,13 +1030,14 @@
       : (cat ? cat.name : '未分類');
     const sub = [r.note, acct && acct.name].filter(Boolean).map(escapeHtml).join(' · ');
     return `
-      <button class="record record--btn" onclick="location.hash='edit?id=${encodeURIComponent(r.id)}'">
+      <button class="record record--btn" onclick="location.hash='edit?id=${encodeURIComponent(r.id)}'" title="點選編輯">
         <div class="${iconCls}">${icon}</div>
         <div class="record__body">
           <div class="record__title truncate">${escapeHtml(label)}</div>
           ${sub ? `<div class="record__sub truncate">${sub}</div>` : ''}
         </div>
         <div class="record__amount num ${amtCls}">${sign}${fmtMoney(r.amount, cur)}</div>
+        <span class="record__chev" aria-hidden="true">›</span>
       </button>
     `;
   }
