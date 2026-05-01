@@ -1,7 +1,7 @@
 // by_account · Service Worker (PWA L1)
 // 策略：靜態檔 cache-first；API（POST 到 Apps Script）一律 network-only。
 
-const CACHE = 'by_account-v0.4.1';
+const CACHE = 'by_account-v0.5.0';
 const ASSETS = [
   './',
   './index.html',
@@ -9,7 +9,30 @@ const ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',
-  './icons/favicon-32.png'
+  './icons/favicon-32.png',
+  // 浣熊插畫
+  './icons/empty-no-ledger.png',
+  './icons/empty-no-records.png',
+  './icons/type-expense.png',
+  './icons/type-income.png',
+  './icons/type-transfer.png',
+  './icons/ledger-shared.png',
+  './icons/ledger-private.png',
+  './icons/ledger-locked.png',
+  './icons/nav-home.png',
+  './icons/nav-add.png',
+  './icons/nav-settings.png',
+  './icons/time-morning.png',
+  './icons/time-noon.png',
+  './icons/time-afternoon.png',
+  './icons/time-night.png',
+  './icons/cat-food.png',
+  './icons/cat-transport.png',
+  './icons/cat-shopping.png',
+  './icons/cat-home.png',
+  './icons/cat-salary.png',
+  './icons/cat-bonus.png',
+  './icons/cat-other-income.png'
 ];
 
 self.addEventListener('install', (event) => {

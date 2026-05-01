@@ -513,6 +513,27 @@
       font-size: 12px; color: var(--ink); cursor: pointer; user-select: all;
     }
 
+    /* =============== 浣熊圖示通用樣式 =============== */
+    /* 帳本卡左側圖（52x52 容器） */
+    .ledger-card__icon img { width: 100%; height: 100%; object-fit: contain; padding: 4px; box-sizing: border-box; }
+
+    /* 記錄列圖（40x40 容器） */
+    .record__icon img { width: 100%; height: 100%; object-fit: contain; padding: 3px; box-sizing: border-box; }
+    .record__icon .emoji-fallback { font-size: 20px; }
+
+    /* 底部 nav 圖（24x24） */
+    .nav-item__img { width: 28px; height: 28px; object-fit: contain; }
+    .nav-item__emoji { font-size: 22px; line-height: 1; }
+
+    /* 空狀態大圖 */
+    .empty__img { width: 180px; height: 180px; object-fit: contain; margin: 0 auto; }
+
+    /* 問候語小圖 */
+    .greet__icon { display: inline-block; vertical-align: -8px; width: 32px; height: 32px; object-fit: contain; margin-right: 2px; }
+
+    /* 類型 tab 小圖 */
+    .type-tab__img { display: inline-block; vertical-align: -5px; width: 22px; height: 22px; object-fit: contain; margin-right: 2px; }
+
     /* iPhone safe area for inputs (avoid auto-zoom) */
     @media (max-width: 480px) {
       .input, .select, .textarea { font-size: 16px; }
@@ -645,6 +666,39 @@
       ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   }
 
+  // ============ 自訂浣熊 icon 圖（沒對應的 fallback 用 emoji） ============
+  const CAT_ICONS = {
+    '飲食':     'icons/cat-food.png',
+    '交通':     'icons/cat-transport.png',
+    '購物':     'icons/cat-shopping.png',
+    '居家':     'icons/cat-home.png',
+    '薪資':     'icons/cat-salary.png',
+    '獎金':     'icons/cat-bonus.png',
+    '其他收入': 'icons/cat-other-income.png'
+    // 醫療 / 娛樂 / 其他 尚未生成 → 自動 fallback emoji
+  };
+  const TYPE_ICONS = {
+    expense:  'icons/type-expense.png',
+    income:   'icons/type-income.png',
+    transfer: 'icons/type-transfer.png'
+  };
+  const NAV_ICONS = {
+    home:     'icons/nav-home.png',
+    add:      'icons/nav-add.png',
+    settings: 'icons/nav-settings.png'
+  };
+  function ledgerIconSrc(s) {
+    if (s.locked) return 'icons/ledger-locked.png';
+    if (s.visibility === 'private') return 'icons/ledger-private.png';
+    return 'icons/ledger-shared.png';
+  }
+  function imgTag(src, alt) {
+    return `<img src="${src}" alt="${alt || ''}" />`;
+  }
+  function emojiSpan(emoji) {
+    return `<span class="emoji-fallback">${emoji}</span>`;
+  }
+
   // ============ 大頭貼（per-device，存於 localStorage） ============
   function getAvatar() { return localStorage.getItem(LS_AVATAR) || ''; }
   function setAvatar(v) {
@@ -707,12 +761,14 @@
   window.resetAvatar = resetAvatar;
   function greetingHi() {
     const h = new Date().getHours();
-    if (h < 5)  return '🌙 夜深了';
-    if (h < 11) return '🌅 早安';
-    if (h < 14) return '🍱 午安';
-    if (h < 18) return '☕ 午後好';
-    if (h < 22) return '🌙 晚安';
-    return '🌙 夜深了';
+    let key, text;
+    if (h < 5)       { key = 'night';     text = '夜深了'; }
+    else if (h < 11) { key = 'morning';   text = '早安'; }
+    else if (h < 14) { key = 'noon';      text = '午安'; }
+    else if (h < 18) { key = 'afternoon'; text = '午後好'; }
+    else if (h < 22) { key = 'night';     text = '晚安'; }
+    else             { key = 'night';     text = '夜深了'; }
+    return `<img class="greet__icon" src="icons/time-${key}.png" alt="" /> ${text}`;
   }
 
   // =====================================================================
@@ -776,9 +832,13 @@
   }
   function navItem(id, icon, label) {
     const active = state.page === id ? ' is-active' : '';
+    const src = NAV_ICONS[id];
+    const iconHtml = src
+      ? `<img class="nav-item__img" src="${src}" alt="" />`
+      : `<span class="nav-item__emoji">${icon}</span>`;
     return `
       <button class="nav-item${active}" onclick="location.hash='${id}'">
-        <span class="nav-item__icon">${icon}</span>
+        ${iconHtml}
         <span>${label}</span>
         ${state.page === id ? '<span class="nav-item__dot"></span>' : ''}
       </button>
@@ -901,14 +961,14 @@
     const u = state.user || {};
     const greet = `
       <div class="greet">
-        <div class="greet__hi">${greetingHi()}，${escapeHtml(u.display_name || u.account || '')}</div>
+        <div class="greet__hi">${greetingHi()}<span style="margin-left:4px">${escapeHtml(u.display_name || u.account || '')}</span></div>
         <div class="greet__sub">今天也要好好記帳喔～</div>
       </div>
     `;
     if (!sheets.length) {
       return render(appShell(greet + `
         <div class="card empty">
-          <div class="empty__icon">📒</div>
+          <img class="empty__img" src="icons/empty-no-ledger.png" alt="" />
           <div class="empty__title">還沒有任何帳本</div>
           <div class="empty__hint">${u.role==='user' ? '請聯絡管理員開一本給你 🙋' : '到「設定」建立第一本帳本吧 ✨'}</div>
         </div>
@@ -916,7 +976,7 @@
     }
     const cards = sheets.map(s => {
       const iconCls = s.locked ? 'ledger-card__icon--locked' : (s.visibility==='private' ? 'ledger-card__icon--private' : 'ledger-card__icon--shared');
-      const icon   = s.locked ? '🔒' : (s.visibility==='private' ? '🔐' : '👥');
+      const iconSrc = ledgerIconSrc(s);
       const chip   = s.locked
         ? '<span class="chip chip--lilac">🔒 無權檢視</span>'
         : (s.visibility==='private'
@@ -924,7 +984,7 @@
             : '<span class="chip chip--honey">共同</span>');
       return `
         <button class="ledger-card" data-id="${s.id}" data-locked="${s.locked}">
-          <div class="ledger-card__icon ${iconCls}">${icon}</div>
+          <div class="ledger-card__icon ${iconCls}"><img src="${iconSrc}" alt="" /></div>
           <div class="ledger-card__body">
             <div class="ledger-card__name truncate">${escapeHtml(s.name)}</div>
             <div class="ledger-card__meta">${chip}<span class="ledger-card__role">· ${escapeHtml(s.role)}</span></div>
@@ -988,7 +1048,7 @@
       </div>
     `).join('') : `
       <div class="card empty">
-        <div class="empty__icon">🌱</div>
+        <img class="empty__img" src="icons/empty-no-records.png" alt="" />
         <div class="empty__hint">這個月還沒記帳，<br/>從下方 ➕ 開始吧</div>
       </div>`;
 
@@ -1024,14 +1084,22 @@
     const sign = r.type === 'income' ? '+' : (r.type === 'expense' ? '−' : '↔');
     const amtCls = r.type === 'income' ? 'amount--mint' : (r.type === 'expense' ? 'amount--brick' : 'amount--muted');
     const iconCls = r.type === 'transfer' ? 'record__icon record__icon--transfer' : 'record__icon';
-    const icon = r.type === 'transfer' ? '🔄' : (cat ? cat.icon : '📌');
+    // 圖示優先順序：轉帳 → type 圖；類別有對應圖 → 用圖；否則 fallback emoji
+    let iconHtml;
+    if (r.type === 'transfer') {
+      iconHtml = `<img src="${TYPE_ICONS.transfer}" alt="" />`;
+    } else if (cat && CAT_ICONS[cat.name]) {
+      iconHtml = `<img src="${CAT_ICONS[cat.name]}" alt="" />`;
+    } else {
+      iconHtml = `<span class="emoji-fallback">${cat ? cat.icon : '📌'}</span>`;
+    }
     const label = r.type === 'transfer'
       ? `${acct ? acct.name : ''} → ${(acctMap[r.transfer_to_account_id] || {}).name || ''}`
       : (cat ? cat.name : '未分類');
     const sub = [r.note, acct && acct.name].filter(Boolean).map(escapeHtml).join(' · ');
     return `
       <button class="record record--btn" onclick="location.hash='edit?id=${encodeURIComponent(r.id)}'" title="點選編輯">
-        <div class="${iconCls}">${icon}</div>
+        <div class="${iconCls}">${iconHtml}</div>
         <div class="record__body">
           <div class="record__title truncate">${escapeHtml(label)}</div>
           ${sub ? `<div class="record__sub truncate">${sub}</div>` : ''}
@@ -1094,9 +1162,9 @@
         </div>
 
         <div class="type-tabs">
-          <button class="type-tab t-expense is-active"  data-type="expense">💸 支出</button>
-          <button class="type-tab t-income"             data-type="income">💰 收入</button>
-          <button class="type-tab t-transfer"           data-type="transfer">🔄 轉帳</button>
+          <button class="type-tab t-expense is-active"  data-type="expense"><img class="type-tab__img" src="icons/type-expense.png" alt="" /> 支出</button>
+          <button class="type-tab t-income"             data-type="income"><img class="type-tab__img" src="icons/type-income.png" alt="" /> 收入</button>
+          <button class="type-tab t-transfer"           data-type="transfer"><img class="type-tab__img" src="icons/type-transfer.png" alt="" /> 轉帳</button>
         </div>
 
         <div class="card card__pad stack">
@@ -1274,9 +1342,9 @@
         </div>
 
         <div class="type-tabs">
-          <button class="type-tab t-expense  ${rec.type==='expense'?'is-active':''}" data-type="expense">💸 支出</button>
-          <button class="type-tab t-income   ${rec.type==='income' ?'is-active':''}" data-type="income">💰 收入</button>
-          <button class="type-tab t-transfer ${rec.type==='transfer'?'is-active':''}" data-type="transfer">🔄 轉帳</button>
+          <button class="type-tab t-expense  ${rec.type==='expense'?'is-active':''}" data-type="expense"><img class="type-tab__img" src="icons/type-expense.png" alt="" /> 支出</button>
+          <button class="type-tab t-income   ${rec.type==='income' ?'is-active':''}" data-type="income"><img class="type-tab__img" src="icons/type-income.png" alt="" /> 收入</button>
+          <button class="type-tab t-transfer ${rec.type==='transfer'?'is-active':''}" data-type="transfer"><img class="type-tab__img" src="icons/type-transfer.png" alt="" /> 轉帳</button>
         </div>
 
         <div class="card card__pad stack">
