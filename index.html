@@ -1301,7 +1301,11 @@
       const note = document.getElementById('note').value;
       if (!amount || amount <= 0) return toast('金額還沒填上喔', 'error');
       if (!date) return toast('請選日期', 'error');
-      const payload = { sheet_id: state.ledger.id, type: curType, amount, date, account_id, note };
+      const payload = {
+        sheet_id: state.ledger.id, type: curType, amount, date, account_id, note,
+        excluded_from_total: document.getElementById('excludedFromTotal').checked,
+        partner_settled:     document.getElementById('partnerSettled').checked
+      };
       if (curType === 'transfer') {
         payload.transfer_to_account_id = document.getElementById('acct2').value;
         if (payload.account_id === payload.transfer_to_account_id)
