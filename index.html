@@ -1125,17 +1125,27 @@
     const label = r.type === 'transfer'
       ? `${acct ? acct.name : ''} → ${(acctMap[r.transfer_to_account_id] || {}).name || ''}`
       : (cat ? cat.name : '未分類');
-    const sub = [r.note, acct && acct.name].filter(Boolean).map(escapeHtml).join(' · ');
+    // 「誰最後改的」：updated_by 優先，沒有就 created_by；如果 updated_at != created_at 表示有編輯過
+    const editor = r.updated_by || r.created_by;
+    const editorName = editor ? userNameOf(editor) : '';
+    const isEdited = r.updated_at && r.created_at && r.updated_at !== r.created_at;
+    const subParts = [];
+    if (r.note)  subParts.push(escapeHtml(r.note));
+    if (acct)    subParts.push(escapeHtml(acct.name));
+    if (editorName) subParts.push((isEdited ? '✏️ ' : '') + escapeHtml(editorName));
+    const subHtml = subParts.length ? `<div class="record__sub truncate">${subParts.join(' · ')}</div>` : '';
+
     const badges = [];
     if (r.excluded_from_total) badges.push('<span class="chip chip--soft">💵 不計入</span>');
     if (r.partner_settled)     badges.push('<span class="chip chip--mint">✓ 已結算</span>');
     const badgesHtml = badges.length ? `<div class="record__badges">${badges.join('')}</div>` : '';
+
     return `
       <button class="record record--btn" onclick="location.hash='edit?id=${encodeURIComponent(r.id)}'" title="點選編輯">
         <div class="${iconCls}">${iconHtml}</div>
         <div class="record__body">
           <div class="record__title truncate">${escapeHtml(label)}</div>
-          ${sub ? `<div class="record__sub truncate">${sub}</div>` : ''}
+          ${subHtml}
           ${badgesHtml}
         </div>
         <div class="record__amount num ${amtCls} ${r.excluded_from_total?'amount--strike':''}">${sign}${fmtMoney(r.amount, cur)}</div>
