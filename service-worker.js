@@ -1,7 +1,7 @@
 // by_account · Service Worker (PWA L1)
 // 策略：靜態檔 cache-first；API（POST 到 Apps Script）一律 network-only。
 
-const CACHE = 'by_account-v0.7.1';
+const CACHE = 'by_account-v0.7.2';
 const ASSETS = [
   './',
   './index.html',
