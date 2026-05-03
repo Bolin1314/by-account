@@ -317,6 +317,8 @@
       display: flex; align-items: center; gap: 12px; padding: 14px 16px;
     }
     .record + .record { border-top: 1px solid var(--line); }
+    .record__badges { margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
+    .amount--strike { text-decoration: line-through; opacity: .6; }
     .record--btn { width: 100%; text-align: left; transition: background .12s; cursor: pointer; border: none; background: transparent; }
     .record--btn:active { background: var(--soft); }
     .record--btn:hover { background: var(--soft); }
@@ -1059,8 +1061,10 @@
     const catMap = {}; cats.forEach(c => catMap[c.id] = c);
     const acctMap = {}; accts.forEach(a => acctMap[a.id] = a);
 
-    const inc = res.items.filter(r => r.type === 'income').reduce((s,r) => s + Number(r.amount), 0);
-    const exp = res.items.filter(r => r.type === 'expense').reduce((s,r) => s + Number(r.amount), 0);
+    // 計入總和時排除「從提款現金消費」標記的（避免重複計算）
+    const countable = res.items.filter(r => !r.excluded_from_total);
+    const inc = countable.filter(r => r.type === 'income').reduce((s,r) => s + Number(r.amount), 0);
+    const exp = countable.filter(r => r.type === 'expense').reduce((s,r) => s + Number(r.amount), 0);
 
     const grouped = {};
     res.items.forEach(r => { (grouped[r.date] = grouped[r.date] || []).push(r); });
@@ -1122,14 +1126,19 @@
       ? `${acct ? acct.name : ''} → ${(acctMap[r.transfer_to_account_id] || {}).name || ''}`
       : (cat ? cat.name : '未分類');
     const sub = [r.note, acct && acct.name].filter(Boolean).map(escapeHtml).join(' · ');
+    const badges = [];
+    if (r.excluded_from_total) badges.push('<span class="chip chip--soft">💵 不計入</span>');
+    if (r.partner_settled)     badges.push('<span class="chip chip--mint">✓ 已結算</span>');
+    const badgesHtml = badges.length ? `<div class="record__badges">${badges.join('')}</div>` : '';
     return `
       <button class="record record--btn" onclick="location.hash='edit?id=${encodeURIComponent(r.id)}'" title="點選編輯">
         <div class="${iconCls}">${iconHtml}</div>
         <div class="record__body">
           <div class="record__title truncate">${escapeHtml(label)}</div>
           ${sub ? `<div class="record__sub truncate">${sub}</div>` : ''}
+          ${badgesHtml}
         </div>
-        <div class="record__amount num ${amtCls}">${sign}${fmtMoney(r.amount, cur)}</div>
+        <div class="record__amount num ${amtCls} ${r.excluded_from_total?'amount--strike':''}">${sign}${fmtMoney(r.amount, cur)}</div>
         <span class="record__chev" aria-hidden="true">›</span>
       </button>
     `;
@@ -1222,6 +1231,17 @@
             <span class="field__label">備註（選填）</span>
             <textarea id="note" class="textarea" rows="2" placeholder="今天請了同事一杯咖啡…"></textarea>
           </div>
+
+          <label class="check">
+            <input type="checkbox" id="excludedFromTotal" />
+            <span class="check__box"></span>
+            <span class="check__label">💵 從提款現金消費（不重複計入總和）</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="partnerSettled" />
+            <span class="check__box"></span>
+            <span class="check__label">✓ 老婆已收到款項</span>
+          </label>
         </div>
 
         <button id="saveBtn" class="btn btn--primary btn--lg btn--block"><img class="icon-inline" src="icons/save.png" alt="" /> 儲存</button>
@@ -1406,6 +1426,17 @@
             <span class="field__label">備註</span>
             <textarea id="note" class="textarea" rows="2" placeholder="備註（選填）">${escapeHtml(rec.note || '')}</textarea>
           </div>
+
+          <label class="check">
+            <input type="checkbox" id="excludedFromTotal" ${rec.excluded_from_total ? 'checked' : ''} />
+            <span class="check__box"></span>
+            <span class="check__label">💵 從提款現金消費（不重複計入總和）</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="partnerSettled" ${rec.partner_settled ? 'checked' : ''} />
+            <span class="check__box"></span>
+            <span class="check__label">✓ 老婆已收到款項</span>
+          </label>
         </div>
 
         <button id="saveBtn" class="btn btn--primary btn--lg btn--block"><img class="icon-inline" src="icons/save.png" alt="" /> 儲存修改</button>
@@ -1472,7 +1503,9 @@
         type: curType,
         amount, date, account_id, note,
         category_id: curType === 'transfer' ? '' : (curCatId || ''),
-        transfer_to_account_id: curType === 'transfer' ? document.getElementById('acct2').value : ''
+        transfer_to_account_id: curType === 'transfer' ? document.getElementById('acct2').value : '',
+        excluded_from_total: document.getElementById('excludedFromTotal').checked,
+        partner_settled:     document.getElementById('partnerSettled').checked
       };
       if (curType === 'transfer' && payload.account_id === payload.transfer_to_account_id)
         return toast('同一帳戶不可互轉', 'error');
