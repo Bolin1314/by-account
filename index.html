@@ -573,6 +573,31 @@
     /* 問候語小圖 */
     .greet__icon { display: inline-block; vertical-align: -8px; width: 32px; height: 32px; object-fit: contain; margin-right: 2px; }
 
+    /* 早安：疊一個旋轉的太陽 SVG 在浣熊上方 */
+    .greet__morning {
+      position: relative; display: inline-block; width: 32px; height: 32px;
+      vertical-align: -8px; margin-right: 2px;
+    }
+    .greet__morning .greet__icon { vertical-align: top; margin: 0; }
+    .sun-rays {
+      position: absolute; top: -6px; right: -6px;
+      width: 22px; height: 22px; pointer-events: none;
+      filter: drop-shadow(0 0 3px rgba(245,158,11,.45));
+    }
+    .sun-rays__core {
+      fill: #FCB635;
+    }
+    .sun-rays__spin {
+      transform-origin: 12px 12px;
+      animation: sun-spin 7s linear infinite;
+    }
+    .sun-rays line {
+      stroke: #F59E0B; stroke-width: 2.4; stroke-linecap: round;
+    }
+    @keyframes sun-spin {
+      to { transform: rotate(360deg); }
+    }
+
     /* 類型 tab 小圖 */
     .type-tab__img { display: inline-block; vertical-align: -5px; width: 22px; height: 22px; object-fit: contain; margin-right: 2px; }
 
@@ -825,6 +850,25 @@
     else if (h < 18) { key = 'afternoon'; text = '午後好'; }
     else if (h < 22) { key = 'night';     text = '晚安'; }
     else             { key = 'night';     text = '夜深了'; }
+    // 早安特別待遇：圖上方疊一個會旋轉的太陽光線 SVG
+    if (key === 'morning') {
+      return `<span class="greet__morning">
+        <img class="greet__icon" src="icons/time-morning.png" alt="" />
+        <svg class="sun-rays" viewBox="0 0 24 24" aria-hidden="true">
+          <g class="sun-rays__spin">
+            <line x1="12" y1="2"  x2="12" y2="5.5"/>
+            <line x1="12" y1="18.5" x2="12" y2="22"/>
+            <line x1="2"  y1="12" x2="5.5" y2="12"/>
+            <line x1="18.5" y1="12" x2="22" y2="12"/>
+            <line x1="4.9" y1="4.9" x2="7.4" y2="7.4"/>
+            <line x1="16.6" y1="16.6" x2="19.1" y2="19.1"/>
+            <line x1="4.9" y1="19.1" x2="7.4" y2="16.6"/>
+            <line x1="16.6" y1="7.4" x2="19.1" y2="4.9"/>
+          </g>
+          <circle class="sun-rays__core" cx="12" cy="12" r="3.5"/>
+        </svg>
+      </span> ${text}`;
+    }
     return `<img class="greet__icon" src="icons/time-${key}.png" alt="" /> ${text}`;
   }
 
