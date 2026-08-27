@@ -1,7 +1,8 @@
 // by_account · Service Worker (PWA L1)
-// 策略：靜態檔 cache-first；API（POST 到 Apps Script）一律 network-only。
+// 策略：靜態檔 cache-first；API（POST 到家庭 Worker）一律 network-only。
+// 改動 index.html 後務必調高 CACHE 版本號，否則使用者裝置會續用舊快取。
 
-const CACHE = 'by_account-v0.7.4';
+const CACHE = 'by_account-v0.8.0';
 const ASSETS = [
   './',
   './index.html',

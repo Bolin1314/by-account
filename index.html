@@ -115,6 +115,11 @@
     .btn--danger:hover { background: var(--brick-l); }
     .btn--block { width: 100%; }
     .btn--lg { padding: 14px 24px; font-size: 16px; min-height: 52px; }
+    .btn--sm {
+      padding: 8px 14px; font-size: 13px; min-height: 36px;
+      background: var(--soft); color: var(--ink);
+    }
+    .btn--sm:hover { background: var(--line); }
     .btn--icon {
       width: 40px; height: 40px; padding: 0; border-radius: var(--r-pill);
       color: var(--muted); font-size: 20px;
@@ -221,7 +226,7 @@
       border-top: 1px solid var(--line);
       box-shadow: 0 -2px 12px rgba(63,45,32,.04);
     }
-    .app__nav-inner { display: grid; grid-template-columns: repeat(3, 1fr); height: var(--nav-h); }
+    .app__nav-inner { display: grid; grid-template-columns: repeat(4, 1fr); height: var(--nav-h); }
     .nav-item {
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
       color: var(--muted); font-size: 11px; transition: color .15s;
@@ -460,6 +465,8 @@
     }
     @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
     @keyframes slideIn { from { transform: translateX(100%) } to { transform: translateX(0) } }
+    /* 置中彈窗（與側邊選單共用 id=overlay，靠 closeMenu() 關閉） */
+    .overlay--center { justify-content: center; align-items: center; padding: 24px; }
     .side-menu {
       width: 78%; max-width: 320px; height: 100%; background: var(--warm-bg);
       padding: 24px 20px; padding-top: calc(20px + var(--safe-top)); padding-bottom: calc(20px + var(--safe-bottom));
@@ -616,7 +623,8 @@
   // =====================================================================
   // 1. 設定 / 狀態
   // =====================================================================
-  const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwoTAXj1rnwLjaXoZhLrYGTE7CCpxHmVFwrSeNS3W16zIjHmv2yV9znPrvn-ey8UOoy1w/exec';
+  // 家庭 Worker（D-001；T-008 切換）。舊後端 Apps Script 已凍結為回退路徑。
+  const WEB_APP_URL = 'https://by-account.bolin131419.workers.dev';
 
   const LS_URL     = 'by_account:web_app_url';
   const LS_TOKEN   = 'by_account:session_token';
@@ -624,6 +632,17 @@
   const LS_LEDGER  = 'by_account:current_ledger';
   const LS_EXPIRES = 'by_account:expires_at';
   const LS_AVATAR  = 'by_account:avatar';
+
+  // T-008 切換：舊裝置的 localStorage 可能還存著 Apps Script 網址（設定頁「變更連線」留下的），
+  // 若不清掉，改了 WEB_APP_URL 常數也不會生效。連同舊 session 一起清（在新後端無效）。
+  (function migrateToWorker() {
+    const saved = localStorage.getItem(LS_URL);
+    if (saved && saved.indexOf('script.google.com') >= 0) {
+      localStorage.removeItem(LS_URL);
+      localStorage.removeItem(LS_TOKEN);
+      localStorage.removeItem(LS_EXPIRES);
+    }
+  })();
 
   const state = {
     url:    localStorage.getItem(LS_URL) || WEB_APP_URL,
@@ -889,12 +908,17 @@
     const [page, query] = raw.split('?');
     const params = Object.fromEntries(new URLSearchParams(query || ''));
     state.page = page;
-    if (!state.token && page !== 'login' && page !== 'reset-url') return pageLogin();
+    if (!state.token && page !== 'login' && page !== 'reset-url' && page !== 'forgot') return pageLogin();
     switch (page) {
       case 'login':       return pageLogin();
+      case 'forgot':      return pageForgot();
+      case 'change-pw':   return pageChangePassword(params);
+      case 'users':       return pageUsers();
+      case 'members':     return pageMembers();
       case 'home':        return pageHome();
       case 'ledger':      return pageLedger(params);
       case 'add':         return pageAddRecord();
+      case 'stats':       return pageStats(params);
       case 'edit':        return pageEditRecord(params);
       case 'settings':    return pageSettings();
       case 'new-ledger':  return pageNewLedger();
@@ -925,6 +949,7 @@
           <div class="app__nav-inner">
             ${navItem('home',     '🏠', '帳本')}
             ${navItem('add',      '➕', '記帳')}
+            ${navItem('stats',    '📊', '統計')}
             ${navItem('settings', '⚙️', '設定')}
           </div>
         </nav>
@@ -959,7 +984,7 @@
           </div>
           <button class="side-menu__btn" onclick="goAndCloseMenu('settings')">⚙️ <span>設定</span></button>
           <button class="side-menu__btn side-menu__btn--danger" onclick="logout()"><img class="icon-inline" src="icons/logout.png" alt="" /> <span>登出</span></button>
-          <div class="side-menu__footer">by_account · v0.1</div>
+          <div class="side-menu__footer">by_account · v0.8</div>
         </aside>
       </div>
     `;
@@ -1002,6 +1027,9 @@
               <span class="check__label">記住我（30 天）</span>
             </label>
             <button id="loginBtn" class="btn btn--primary btn--lg btn--block">登入</button>
+            <div class="center-text" style="font-size:12px;color:var(--muted);padding-top:4px">
+              <button onclick="location.hash='forgot'" style="color:inherit;text-decoration:underline;text-underline-offset:2px">忘記密碼？</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1020,6 +1048,10 @@
     try {
       const r = await api('login', { account, password, remember_me: remember, user_agent: navigator.userAgent });
       setToken(r.session_token); setUser(r.user); setExpiresAt(r.expires_at);
+      if (r.user.must_change_password) {
+        toast('請先設定你自己的新密碼 🔑');
+        return navigate('change-pw', { force: '1' });
+      }
       toast('歡迎回來，' + (r.user.display_name || r.user.account), 'success');
       navigate('home');
     } catch (e) {
@@ -1040,8 +1072,345 @@
       missing_account: '請輸入帳號',
       missing_amount: '請輸入金額',
       missing_category: '請選類別',
-      missing_account_id: '請選帳戶'
-    })[code] || code;
+      missing_account_id: '請選帳戶',
+      account_exists: '這個帳號已經有人用了',
+      user_not_found: '找不到這個使用者',
+      invalid_role: '角色不正確',
+      cannot_modify_super_admin: '不能更改超級管理員的角色',
+      bad_old_password: '目前密碼不正確',
+      invalid_code: '驗證碼不正確或已過期',
+      missing_name: '請輸入名稱',
+      not_a_member: '這個人不是成員',
+      private_no_members: '私人帳本不能加成員',
+      read_only: '你只有檢視權限',
+      admin_cannot_write_private: '管理員不能修改私人帳本'
+    })[code] || (String(code).startsWith('password_too_short') ? ('密碼至少要 ' + String(code).split(':')[1] + ' 碼') : code);
+  }
+
+  // =====================================================================
+  // 6.5 頁面：忘記密碼（不需登入；驗證碼寄到帳號登記的 email）
+  // =====================================================================
+  function pageForgot() {
+    render(`
+      <div class="center-page">
+        <div class="card login-card">
+          <div class="login-hero">
+            <div class="login-hero__title">忘記密碼</div>
+            <div class="login-hero__sub">驗證碼會寄到帳號登記的信箱 📮</div>
+          </div>
+          <div class="stack">
+            <div class="input-wrap">
+              <span class="input-wrap__icon">👤</span>
+              <input id="fgAccount" class="input input--with-icon" placeholder="帳號" autocomplete="username" />
+            </div>
+            <button id="fgSendBtn" class="btn btn--primary btn--block">寄送驗證碼</button>
+
+            <div id="fgStep2" style="display:none" class="stack">
+              <div class="input-wrap">
+                <span class="input-wrap__icon">🔢</span>
+                <input id="fgCode" class="input input--with-icon" placeholder="6 位數驗證碼" inputmode="numeric" maxlength="6" />
+              </div>
+              <div class="input-wrap">
+                <span class="input-wrap__icon">🔒</span>
+                <input id="fgNewPw" class="input input--with-icon" type="password" placeholder="新密碼（至少 8 碼）" autocomplete="new-password" />
+              </div>
+              <button id="fgResetBtn" class="btn btn--primary btn--block">設定新密碼</button>
+            </div>
+
+            <div class="center-text" style="font-size:12px;color:var(--muted);padding-top:4px">
+              <button onclick="location.hash='login'" style="color:inherit;text-decoration:underline;text-underline-offset:2px">回登入</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `);
+    document.getElementById('fgSendBtn').onclick = async () => {
+      const account = document.getElementById('fgAccount').value.trim();
+      if (!account) return toast('請輸入帳號', 'error');
+      const btn = document.getElementById('fgSendBtn');
+      btn.disabled = true; btn.textContent = '寄送中…';
+      try {
+        await api('request_password_reset', { account });
+        // 回應不區分帳號是否存在（避免帳號被試探），一律進下一步
+        toast('如果帳號有登記信箱，驗證碼已寄出 📮', 'success');
+        document.getElementById('fgStep2').style.display = '';
+        setTimeout(() => document.getElementById('fgCode').focus(), 60);
+      } catch (e) {
+        toast('寄送失敗：' + friendlyErr(e.message), 'error');
+      }
+      btn.disabled = false; btn.textContent = '重新寄送驗證碼';
+    };
+    document.getElementById('fgResetBtn').onclick = async () => {
+      const account = document.getElementById('fgAccount').value.trim();
+      const code = document.getElementById('fgCode').value.trim();
+      const new_password = document.getElementById('fgNewPw').value;
+      if (!code) return toast('請輸入驗證碼', 'error');
+      if (!new_password || new_password.length < 8) return toast('新密碼至少要 8 碼', 'error');
+      const btn = document.getElementById('fgResetBtn');
+      btn.disabled = true; btn.textContent = '設定中…';
+      try {
+        await api('confirm_password_reset', { account, code, new_password });
+        toast('密碼已更新，請用新密碼登入 ✨', 'success');
+        navigate('login');
+      } catch (e) {
+        toast('失敗：' + friendlyErr(e.message), 'error');
+        btn.disabled = false; btn.textContent = '設定新密碼';
+      }
+    };
+    setTimeout(() => document.getElementById('fgAccount').focus(), 60);
+  }
+
+  // =====================================================================
+  // 6.6 頁面：修改密碼（force=1 為管理員重設後的強制改密碼）
+  // =====================================================================
+  function pageChangePassword(params) {
+    const force = params.force === '1';
+    const body = `
+      <div class="stack">
+        ${ force ? '<div class="notice">🔑 這是管理員給的臨時密碼，請設定一組只有你知道的新密碼。</div>' : '' }
+        <div class="card card__pad stack">
+          <div class="field">
+            <span class="field__label">目前密碼</span>
+            <input id="cpOld" class="input" type="password" autocomplete="current-password" />
+          </div>
+          <div class="field">
+            <span class="field__label">新密碼</span>
+            <input id="cpNew" class="input" type="password" placeholder="至少 8 碼" autocomplete="new-password" />
+          </div>
+          <div class="field">
+            <span class="field__label">再輸入一次新密碼</span>
+            <input id="cpNew2" class="input" type="password" autocomplete="new-password" />
+          </div>
+          <button id="cpBtn" class="btn btn--primary btn--block">更新密碼</button>
+        </div>
+      </div>
+    `;
+    render(force
+      ? `<div class="app"><main class="app__main" style="padding-top:32px">${body}</main></div>`
+      : appShell(body, { title: '修改密碼', back: true }));
+
+    document.getElementById('cpBtn').onclick = async () => {
+      const oldPw = document.getElementById('cpOld').value;
+      const newPw = document.getElementById('cpNew').value;
+      const newPw2 = document.getElementById('cpNew2').value;
+      if (!oldPw) return toast('請輸入目前密碼', 'error');
+      if (!newPw || newPw.length < 8) return toast('新密碼至少要 8 碼', 'error');
+      if (newPw !== newPw2) return toast('兩次輸入的新密碼不一樣', 'error');
+      const btn = document.getElementById('cpBtn');
+      btn.disabled = true; btn.textContent = '更新中…';
+      try {
+        await api('change_password', { old_password: oldPw, new_password: newPw });
+        setUser({ ...(state.user || {}), must_change_password: false });
+        toast('密碼已更新 ✨', 'success');
+        navigate('home');
+      } catch (e) {
+        toast('失敗：' + friendlyErr(e.message), 'error');
+        btn.disabled = false; btn.textContent = '更新密碼';
+      }
+    };
+  }
+
+  // =====================================================================
+  // 6.7 頁面：使用者管理（admin 以上）
+  // =====================================================================
+  async function pageUsers() {
+    const tk = _routeToken;
+    const me = state.user || {};
+    const isSuper = me.role === 'super_admin';
+    if (!isSuper && me.role !== 'admin') {
+      return render(appShell(`
+        <div class="card empty">
+          <img class="empty__img" src="icons/forbidden.png" alt="" />
+          <div class="empty__title">沒有權限</div>
+          <div class="empty__hint">只有管理員可以管理使用者</div>
+        </div>`, { title: '使用者管理', back: true }));
+    }
+    render(appShell(`<div class="empty"><img class="empty__img empty__img--loading" src="icons/loading.png" alt="" /><div class="empty__hint">讀取中…</div></div>`, { title: '使用者管理', back: true }));
+
+    let users;
+    try {
+      users = await api('list_users');
+    } catch (e) {
+      if (tk !== _routeToken) return;
+      return render(appShell(`<div class="card card__pad" style="color:var(--brick)">載入失敗：${escapeHtml(friendlyErr(e.message))}</div>`, { title: '使用者管理', back: true }));
+    }
+    if (tk !== _routeToken) return;
+
+    const rows = users.map(u => {
+      const isSelf = u.id === me.id;
+      const canReset = !(u.role === 'super_admin' && !isSuper);
+      return `
+        <div class="card card__pad" style="margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="grow" style="min-width:0">
+              <div style="font-weight:700" class="truncate">${escapeHtml(u.display_name || u.account)}${isSelf ? '（你）' : ''}</div>
+              <div style="font-size:12px;color:var(--muted)" class="truncate">
+                ${escapeHtml(u.account)} · <span class="chip chip--soft">${escapeHtml(u.role)}</span>
+                ${u.email ? ' · ' + escapeHtml(u.email) : ' · <span style="color:var(--brick)">未登記信箱</span>'}
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            ${ canReset && !isSelf ? `<button class="btn btn--sm" data-act="reset" data-id="${u.id}" data-name="${escapeHtml(u.account)}">產臨時密碼</button>` : '' }
+            ${ isSuper && !isSelf && u.role !== 'super_admin'
+                ? `<button class="btn btn--sm" data-act="role" data-id="${u.id}" data-role="${u.role === 'admin' ? 'user' : 'admin'}">${u.role === 'admin' ? '降為一般' : '升為管理員'}</button>`
+                : '' }
+          </div>
+        </div>`;
+    }).join('');
+
+    render(appShell(`
+      <div class="stack">
+        <div class="card card__pad stack">
+          <div style="font-weight:700;font-size:14px">➕ 建立新帳號</div>
+          <div class="field"><span class="field__label">帳號</span><input id="nuAccount" class="input" placeholder="登入用，例：mom" /></div>
+          <div class="field"><span class="field__label">顯示名稱</span><input id="nuName" class="input" placeholder="例：媽媽" /></div>
+          <div class="field"><span class="field__label">初始密碼</span><input id="nuPw" class="input" placeholder="至少 8 碼" /></div>
+          <div class="field"><span class="field__label">Email（選填，用於忘記密碼）</span><input id="nuEmail" class="input" placeholder="someone@example.com" /></div>
+          ${ isSuper ? `<label class="check"><input type="checkbox" id="nuAdmin" /><span class="check__box"></span><span class="check__label">設為管理員</span></label>` : '' }
+          <button id="nuBtn" class="btn btn--primary btn--block">建立帳號</button>
+        </div>
+        <div>${rows}</div>
+      </div>
+    `, { title: '使用者管理', back: true }));
+
+    document.getElementById('nuBtn').onclick = async () => {
+      const account = document.getElementById('nuAccount').value.trim();
+      const display_name = document.getElementById('nuName').value.trim();
+      const password = document.getElementById('nuPw').value;
+      const email = document.getElementById('nuEmail').value.trim();
+      const adminBox = document.getElementById('nuAdmin');
+      if (!account) return toast('請輸入帳號', 'error');
+      if (!password || password.length < 8) return toast('初始密碼至少 8 碼', 'error');
+      const btn = document.getElementById('nuBtn');
+      btn.disabled = true; btn.textContent = '建立中…';
+      try {
+        await api('create_user', { account, password, display_name: display_name || account, email, role: (adminBox && adminBox.checked) ? 'admin' : 'user' });
+        toast('帳號建好了 ✨', 'success');
+        pageUsers();
+      } catch (e) {
+        toast('建立失敗：' + friendlyErr(e.message), 'error');
+        btn.disabled = false; btn.textContent = '建立帳號';
+      }
+    };
+
+    document.querySelectorAll('[data-act]').forEach(b => {
+      b.onclick = async () => {
+        const act = b.dataset.act;
+        try {
+          if (act === 'reset') {
+            const tmp = 'tmp' + Math.random().toString(36).slice(2, 10);
+            await api('reset_password', { user_id: b.dataset.id, new_password: tmp });
+            showTempPassword(b.dataset.name, tmp);
+          } else if (act === 'role') {
+            await api('update_user_role', { user_id: b.dataset.id, role: b.dataset.role });
+            toast('角色已更新', 'success');
+            pageUsers();
+          }
+        } catch (e) { toast('失敗：' + friendlyErr(e.message), 'error'); }
+      };
+    });
+  }
+  function showTempPassword(account, tmp) {
+    const html = `
+      <div class="overlay overlay--center" id="overlay">
+        <div class="card card__pad" style="max-width:340px" onclick="event.stopPropagation()">
+          <div style="font-weight:700;margin-bottom:8px">🔑 ${escapeHtml(account)} 的臨時密碼</div>
+          <div class="num" style="font-size:22px;font-weight:700;letter-spacing:1px;padding:10px 0;user-select:all">${escapeHtml(tmp)}</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.6">
+            這串只顯示這一次，請立刻抄下來給對方。<br/>
+            對方用它登入後，App 會要求設定自己的新密碼。
+          </div>
+          <button class="btn btn--primary btn--block" style="margin-top:12px" onclick="closeMenu()">我抄好了</button>
+        </div>
+      </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  // =====================================================================
+  // 6.8 頁面：帳本成員（共同帳本；owner 或 admin 可管理）
+  // =====================================================================
+  async function pageMembers() {
+    const tk = _routeToken;
+    const ledger = state.ledger;
+    if (!ledger) return navigate('home');
+    const title = '成員 · ' + ledger.name;
+    render(appShell(`<div class="empty"><img class="empty__img empty__img--loading" src="icons/loading.png" alt="" /><div class="empty__hint">讀取中…</div></div>`, { title, back: true }));
+
+    let members, users;
+    try {
+      members = await api('list_sheet_members', { sheet_id: ledger.id });
+      users = await api('list_users').catch(() => []);
+    } catch (e) {
+      if (tk !== _routeToken) return;
+      return render(appShell(`<div class="card card__pad" style="color:var(--brick)">載入失敗：${escapeHtml(friendlyErr(e.message))}</div>`, { title, back: true }));
+    }
+    if (tk !== _routeToken) return;
+
+    const memberIds = new Set(members.map(m => m.user_id));
+    const candidates = users.filter(u => !memberIds.has(u.id) && u.status === 'active');
+    const ROLE_LABEL = { owner: '擁有者', member: '成員', viewer: '唯讀' };
+
+    const list = members.map(m => `
+      <div class="card card__pad" style="margin-bottom:10px">
+        <div style="font-weight:700" class="truncate">${escapeHtml(m.display_name || m.account || m.user_id)}</div>
+        <div style="font-size:12px;color:var(--muted)">${escapeHtml(m.account || '')} · <span class="chip chip--honey">${ROLE_LABEL[m.role] || m.role}</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          ${['owner','member','viewer'].filter(r => r !== m.role).map(r =>
+            `<button class="btn btn--sm" data-mact="role" data-uid="${m.user_id}" data-role="${r}">改為${ROLE_LABEL[r]}</button>`).join('')}
+          <button class="btn btn--sm" data-mact="remove" data-uid="${m.user_id}" style="color:var(--brick)">移除</button>
+        </div>
+      </div>`).join('') || '<div class="card card__pad" style="color:var(--muted)">還沒有成員</div>';
+
+    render(appShell(`
+      <div class="stack">
+        ${ candidates.length ? `
+        <div class="card card__pad stack">
+          <div style="font-weight:700;font-size:14px">➕ 加入成員</div>
+          <div class="field">
+            <span class="field__label">選擇使用者</span>
+            <select id="mUser" class="select">${candidates.map(u => `<option value="${u.id}">${escapeHtml(u.display_name || u.account)} (${escapeHtml(u.account)})</option>`).join('')}</select>
+          </div>
+          <div class="field">
+            <span class="field__label">權限</span>
+            <select id="mRole" class="select">
+              <option value="member">成員（可記帳）</option>
+              <option value="viewer">唯讀（只能看）</option>
+              <option value="owner">擁有者（可管成員）</option>
+            </select>
+          </div>
+          <button id="mAddBtn" class="btn btn--primary btn--block">加入</button>
+        </div>` : '' }
+        <div>${list}</div>
+      </div>
+    `, { title, back: true }));
+
+    const addBtn = document.getElementById('mAddBtn');
+    if (addBtn) addBtn.onclick = async () => {
+      addBtn.disabled = true; addBtn.textContent = '加入中…';
+      try {
+        await api('add_member', { sheet_id: ledger.id, user_id: document.getElementById('mUser').value, role: document.getElementById('mRole').value });
+        toast('已加入成員 ✨', 'success');
+        pageMembers();
+      } catch (e) {
+        toast('失敗：' + friendlyErr(e.message), 'error');
+        addBtn.disabled = false; addBtn.textContent = '加入';
+      }
+    };
+    document.querySelectorAll('[data-mact]').forEach(b => {
+      b.onclick = async () => {
+        try {
+          if (b.dataset.mact === 'role') {
+            await api('add_member', { sheet_id: ledger.id, user_id: b.dataset.uid, role: b.dataset.role });
+            toast('權限已更新', 'success');
+          } else {
+            await api('remove_member', { sheet_id: ledger.id, user_id: b.dataset.uid });
+            toast('已移除成員', 'success');
+          }
+          pageMembers();
+        } catch (e) { toast('失敗：' + friendlyErr(e.message), 'error'); }
+      };
+    });
   }
 
   // =====================================================================
@@ -1154,6 +1523,9 @@
     res.items.forEach(r => { (grouped[r.date] = grouped[r.date] || []).push(r); });
     const dates = Object.keys(grouped).sort().reverse();
 
+    // 待分類（同步匯入的記錄類別可能空白）：提示補選
+    const pendingCat = res.items.filter(r => r.type !== 'transfer' && !r.category_id).length;
+
     const list = dates.length ? dates.map(d => `
       <div class="day-group">
         <div class="day-group__date">${d}</div>
@@ -1202,6 +1574,7 @@
         </div>` : '' }
       </div>
       ${ res.is_admin_view ? '<div class="notice"><img class="icon-inline-sm" src="icons/warning.png" alt="" /> 你正以 admin 身分檢視，動作已記錄囉。</div>' : '' }
+      ${ pendingCat ? `<div class="notice">🏷️ 有 ${pendingCat} 筆「未分類」記錄（多半是同步匯入的）——點該筆記錄補選類別。</div>` : '' }
       ${list}
     `, { title: ledger.name, back: true }));
   }
@@ -1258,6 +1631,122 @@
     navigate('ledger', { id: state.ledger.id, year: ny, month: nm });
   }
   window.changeMonth = changeMonth;
+
+  // =====================================================================
+  // 8.5 頁面：統計（跨帳本；資料來源 get_stats，SQL 即時聚合）
+  // =====================================================================
+  async function pageStats(params) {
+    const tk = _routeToken;
+    const now = new Date();
+    const year  = Number(params.year)  || now.getFullYear();
+    const month = Number(params.month) || (now.getMonth()+1);
+
+    render(appShell(`<div class="empty"><img class="empty__img empty__img--loading" src="icons/loading.png" alt="" /><div class="empty__hint">統計中…</div></div>`, { title: '統計' }));
+    let data;
+    try {
+      data = await api('get_stats', { year, month });
+    } catch (e) {
+      if (tk !== _routeToken) return;
+      return render(appShell(`<div class="card card__pad" style="color:var(--brick)">載入失敗：${escapeHtml(friendlyErr(e.message))}</div>`, { title: '統計' }));
+    }
+    if (tk !== _routeToken) return;
+
+    const mKey = data.detail.m;
+    const cur = data.months.find(x => x.m === mKey) || { income: 0, expense: 0 };
+    const inc = cur.income, exp = cur.expense;
+
+    const catRows = (list, total) => list.map(c => {
+      const pct = total > 0 ? Math.max(2, Math.round(c.total / total * 100)) : 0;
+      const src = CAT_ICONS[c.name];
+      const icon = src ? `<img class="icon-inline" src="${src}" alt="" />` : escapeHtml(c.icon || '📌');
+      return `
+        <div class="breakdown__row">
+          <span class="breakdown__name truncate">${icon} ${escapeHtml(c.name)}</span>
+          <span class="breakdown__bar"><span class="breakdown__fill" style="width:${pct}%"></span></span>
+          <span class="breakdown__amt num">${fmtMoney(c.total)}</span>
+        </div>`;
+    }).join('');
+    const catsExp = data.detail.categories.filter(c => c.type === 'expense');
+    const catsInc = data.detail.categories.filter(c => c.type === 'income');
+
+    const trendMax = Math.max(1, ...data.months.map(x => Math.max(x.income, x.expense)));
+    const trend = data.months.slice().reverse().map(x => {
+      const wI = Math.max(1, Math.round(x.income  / trendMax * 100));
+      const wE = Math.max(1, Math.round(x.expense / trendMax * 100));
+      return `
+        <div class="breakdown__row"${x.m === mKey ? ' style="font-weight:700"' : ''}>
+          <span class="breakdown__name">${x.m}</span>
+          <span style="flex:1;display:flex;flex-direction:column;gap:3px">
+            <span class="breakdown__bar" style="flex:0 0 6px"><span class="breakdown__fill" style="width:${wI}%;background:var(--mint)"></span></span>
+            <span class="breakdown__bar" style="flex:0 0 6px"><span class="breakdown__fill" style="width:${wE}%"></span></span>
+          </span>
+          <span class="breakdown__amt num" style="display:flex;flex-direction:column;align-items:flex-end">
+            <span style="color:var(--mint)">${fmtMoney(x.income)}</span>
+            <span style="color:var(--brick)">${fmtMoney(x.expense)}</span>
+          </span>
+        </div>`;
+    }).join('');
+
+    const ledSec = data.detail.ledgers.length > 1 ? `
+      <div class="card" style="margin-bottom:14px;padding:14px 16px">
+        <div class="breakdown__title">各帳本（本月）</div>
+        ${data.detail.ledgers.map(l => `
+          <div class="breakdown__row">
+            <span class="breakdown__name truncate">${escapeHtml(l.name)}</span>
+            <span class="breakdown__amt num" style="color:var(--mint)">${fmtMoney(l.income)}</span>
+            <span class="breakdown__amt num" style="color:var(--brick)">${fmtMoney(l.expense)}</span>
+          </div>`).join('')}
+      </div>` : '';
+
+    const exclNote = data.excluded_ledgers.length
+      ? `<div class="notice">🔒 未計入：${data.excluded_ledgers.map(escapeHtml).join('、')}（擁有者未開放合計）</div>`
+      : '';
+
+    render(appShell(`
+      <div class="card" style="margin-bottom:14px">
+        <div class="month-bar">
+          <button class="btn--icon" onclick="statsChangeMonth(${year},${month},-1)">‹</button>
+          <div class="month-bar__label">${year} 年 ${month} 月</div>
+          <button class="btn--icon" onclick="statsChangeMonth(${year},${month},1)">›</button>
+        </div>
+        <div class="summary">
+          <div class="summary__cell">
+            <div class="summary__label">收入</div>
+            <div class="summary__value summary__value--mint num">${fmtMoney(inc)}</div>
+          </div>
+          <div class="summary__cell">
+            <div class="summary__label">支出</div>
+            <div class="summary__value summary__value--brick num">${fmtMoney(exp)}</div>
+          </div>
+          <div class="summary__cell">
+            <div class="summary__label">結餘</div>
+            <div class="summary__value num">${fmtMoney(inc - exp)}</div>
+          </div>
+        </div>
+      </div>
+      ${exclNote}
+      ${catsExp.length ? `
+      <div class="card" style="margin-bottom:14px;padding:14px 16px">
+        <div class="breakdown__title">支出分類</div>
+        ${catRows(catsExp, exp)}
+      </div>` : ''}
+      ${catsInc.length ? `
+      <div class="card" style="margin-bottom:14px;padding:14px 16px">
+        <div class="breakdown__title">收入分類</div>
+        ${catRows(catsInc, inc)}
+      </div>` : ''}
+      ${ledSec}
+      <div class="card" style="margin-bottom:14px;padding:14px 16px">
+        <div class="breakdown__title">近 12 個月</div>
+        ${trend || '<div class="empty__hint">還沒有資料</div>'}
+      </div>
+    `, { title: '統計' }));
+  }
+  function statsChangeMonth(y, m, d) {
+    const t = new Date(y, m - 1 + d, 1);
+    navigate('stats', { year: t.getFullYear(), month: t.getMonth() + 1 });
+  }
+  window.statsChangeMonth = statsChangeMonth;
 
   // =====================================================================
   // 9. 頁面：新增記錄
@@ -1638,7 +2127,7 @@
     };
 
     document.getElementById('deleteBtn').onclick = async () => {
-      if (!confirm('確定刪除這筆記錄？\n刪除後可從主控 Sheet 還原（清空 deleted_at 欄位）。')) return;
+      if (!confirm('確定刪除這筆記錄？\n這是軟刪除，資料仍在資料庫裡，需要時可請管理員還原。')) return;
       try {
         await api('delete_record', { sheet_id: state.ledger.id, record_id: rec.id });
         toast('已刪除', 'success');
@@ -1675,9 +2164,26 @@
               <span class="list-item__label">建立新帳本</span>
               <span class="list-item__chev">›</span>
             </button>
-            <button class="list-item" onclick="alert('使用者管理 v0.2 再加 UI；目前可用 API create_user')">
+            <button class="list-item" onclick="location.hash='users'">
               <span class="list-item__icon"><img class="icon-inline" src="icons/users.png" alt="" /></span>
-              <span class="list-item__label">使用者管理（v0.2）</span>
+              <span class="list-item__label">使用者管理</span>
+              <span class="list-item__chev">›</span>
+            </button>
+          </div>` : '' }
+
+        <div class="card">
+          <button class="list-item" onclick="location.hash='change-pw'">
+            <span class="list-item__icon">🔑</span>
+            <span class="list-item__label">修改密碼</span>
+            <span class="list-item__chev">›</span>
+          </button>
+        </div>
+
+        ${ state.ledger && state.ledger.visibility === 'shared' && (state.ledger.is_owner || state.ledger.role === 'owner' || isAdmin) ? `
+          <div class="card">
+            <button class="list-item" onclick="location.hash='members'">
+              <span class="list-item__icon">👥</span>
+              <span class="list-item__label">成員管理 · ${escapeHtml(state.ledger.name)}</span>
               <span class="list-item__chev">›</span>
             </button>
           </div>` : '' }
@@ -1720,7 +2226,7 @@
         </div>
 
         <div class="center-text" style="font-size:11px;color:var(--muted-2);padding:8px 0 16px">
-          by_account · v0.1 ·
+          by_account · v0.8 ·
           <button onclick="location.hash='reset-url'" style="color:inherit;text-decoration:underline;text-underline-offset:2px">變更連線</button>
         </div>
       </div>
@@ -1800,26 +2306,7 @@
             <span class="field__hint">擁有者可以決定要不要讓 admin 看內容</span>
           </div>
 
-          <details class="advanced" id="advanced">
-            <summary>進階：使用既有 Google Sheet</summary>
-            <div class="stack">
-              <div class="field">
-                <span class="field__label">用法</span>
-                <span class="field__hint">
-                  • 不填 → 系統會在你的 Drive 自動建一份新試算表<br/>
-                  • 填上 → 註冊既有 Sheet（由你或別人事先建好）
-                </span>
-              </div>
-              <div class="field">
-                <span class="field__label">Google Sheet ID（選填）</span>
-                <input id="lSheetId" class="input" placeholder="貼網址中 /spreadsheets/d/ 後面那串" />
-                <span class="field__hint" id="shareHint">
-                  ⚠️ 若是別人帳號的 Sheet，對方須先把 Sheet 分享給<br/>
-                  <span class="copy-chip">bolin131419@gmail.com</span> 並給<b>編輯者</b>權限
-                </span>
-              </div>
-            </div>
-          </details>
+          <div class="field__hint">建好後會自動帶 10 個常用類別與 3 個帳戶，可再自行增修。</div>
         </div>
 
         <button id="createBtn" class="btn btn--primary btn--lg btn--block">建立帳本</button>
@@ -1845,15 +2332,10 @@
       const owner_user_id = visibility === 'private'
         ? document.getElementById('lOwner').value
         : me.id;
-      const google_sheet_id = document.getElementById('lSheetId').value.trim();
-
       const btn = document.getElementById('createBtn');
       btn.disabled = true; btn.textContent = '建立中…';
       try {
-        await api('create_sheet', {
-          name, visibility, owner_user_id,
-          google_sheet_id: google_sheet_id || undefined
-        });
+        await api('create_sheet', { name, visibility, owner_user_id });
         toast('建立成功 ✨', 'success');
         state.cache.sheets = null;
         navigate('home');
@@ -1874,10 +2356,10 @@
           <div class="login-hero">
             <img class="logo logo--img" src="icons/connection.png" alt="" />
             <div class="login-hero__title">變更連線設定</div>
-            <div class="login-hero__sub">緊急情況用：覆寫 Apps Script Web App 網址</div>
+            <div class="login-hero__sub">緊急情況用：覆寫後端 API 網址</div>
           </div>
           <div class="stack">
-            <input id="urlInput" class="input" placeholder="https://script.google.com/macros/s/.../exec" value="${state.url || ''}" />
+            <input id="urlInput" class="input" placeholder="https://by-account.<帳號>.workers.dev" value="${state.url || ''}" />
             <button id="saveBtn" class="btn btn--primary btn--block">儲存並繼續</button>
             ${allowCancel ? '<button id="cancelBtn" class="btn btn--ghost btn--block">取消</button>' : ''}
             <button id="resetBtn" class="btn btn--ghost btn--block">恢復為預設網址</button>
@@ -1887,7 +2369,8 @@
     `);
     document.getElementById('saveBtn').onclick = async () => {
       const v = document.getElementById('urlInput').value.trim();
-      if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(v)) return toast('URL 格式不對', 'error');
+      if (!/^https:\/\/[\w.-]+\.workers\.dev$/.test(v) && !/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(v))
+        return toast('URL 格式不對（workers.dev 網址或舊 Apps Script 網址）', 'error');
       setUrl(v); toast('已儲存', 'success');
       navigate(state.token ? 'home' : 'login');
     };
