@@ -2389,6 +2389,14 @@
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('service-worker.js').catch(() => {});
     });
+    // 新版 Service Worker 接管時自動重載一次，讓使用者立刻拿到新版前端。
+    // 沒有這段的話，改版後第一次開 App 會看到 cache-first 給的舊版，要手動重整才會更新。
+    let _swRefreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (_swRefreshing) return;
+      _swRefreshing = true;
+      location.reload();
+    });
   }
   scheduleExpiryCheck();   // 載入時若已過期，立即踢回 login
   routeFromHash();

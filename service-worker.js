@@ -2,7 +2,7 @@
 // 策略：靜態檔 cache-first；API（POST 到家庭 Worker）一律 network-only。
 // 改動 index.html 後務必調高 CACHE 版本號，否則使用者裝置會續用舊快取。
 
-const CACHE = 'by_account-v0.8.0';
+const CACHE = 'by_account-v0.8.1';
 const ASSETS = [
   './',
   './index.html',
@@ -87,7 +87,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 同源靜態檔 → cache-first
+  // index.html（含導覽請求）→ network-first：
+  // 前端改版後使用者立刻拿到新版，離線時才回快取。圖示等靜態檔仍走 cache-first。
+  const isShell = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html');
+  if (isShell) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put('./index.html', copy)).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
+  // 其餘同源靜態檔 → cache-first
   event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;
