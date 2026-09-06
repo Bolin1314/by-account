@@ -1133,7 +1133,8 @@
       question_text_invalid: '題目要 1～200 字',
       answer_text_invalid: '作答要 1～2000 字',
       question_not_found: '找不到這個題目（可能已被刪除）',
-      answer_unchanged: '內容和目前作答相同，沒有更新'
+      answer_unchanged: '內容和目前作答相同，沒有更新',
+      cannot_delete_self: '不能刪除自己的帳號'
     })[code] || (String(code).startsWith('password_too_short') ? ('密碼至少要 ' + String(code).split(':')[1] + ' 碼') : code);
   }
 
@@ -1305,6 +1306,9 @@
             ${ isSuper && !isSelf && u.role !== 'super_admin'
                 ? `<button class="btn btn--sm" data-act="role" data-id="${u.id}" data-role="${u.role === 'admin' ? 'user' : 'admin'}">${u.role === 'admin' ? '降為一般' : '升為管理員'}</button>`
                 : '' }
+            ${ isSuper && !isSelf && u.role !== 'super_admin'
+                ? `<button class="btn btn--sm" data-act="delete" data-id="${u.id}" data-name="${escapeHtml(u.account)}" style="color:var(--brick)">刪除帳號</button>`
+                : '' }
           </div>
         </div>`;
     }).join('');
@@ -1355,6 +1359,17 @@
           } else if (act === 'role') {
             await api('update_user_role', { user_id: b.dataset.id, role: b.dataset.role });
             toast('角色已更新', 'success');
+            pageUsers();
+          } else if (act === 'delete') {
+            // T-011：先 dry_run 拿清單，讓 super_admin 看清楚會刪掉什麼再確認
+            const pv = await api('delete_user', { user_id: b.dataset.id, dry_run: true });
+            const ledgerLines = pv.ledgers.length
+              ? '\n\n連同他擁有的 ' + pv.ledgers.length + ' 本帳本一起刪除：\n' +
+                pv.ledgers.map(l => '・' + l.name + '（' + (l.visibility === 'private' ? '私人' : '共同') + '，' + l.records + ' 筆記錄' + (l.other_members ? '，另有 ' + l.other_members + ' 位成員' : '') + '）').join('\n')
+              : '\n\n他沒有擁有任何帳本；他在別本帳本記的記錄會保留。';
+            if (!confirm('確定刪除帳號「' + b.dataset.name + '」？' + ledgerLines + '\n\n這個動作無法復原。')) return;
+            await api('delete_user', { user_id: b.dataset.id });
+            toast('帳號已刪除', 'success');
             pageUsers();
           }
         } catch (e) { toast('失敗：' + friendlyErr(e.message), 'error'); }
@@ -2208,7 +2223,7 @@
     if (!uid) return '—';
     if (String(uid).indexOf('sync:') === 0) return '🔁 ' + uid.slice(5) + ' 同步';
     const map = state.cache.user_names || {};
-    return map[uid] || '（未知）';
+    return map[uid] || '（已刪除帳號）';
   }
   function fmtDateTime(iso) {
     if (!iso) return '';
