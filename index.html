@@ -1724,7 +1724,7 @@
           <span class="list-item__chev" id="qaHistChev">›</span>
         </button>
       </div>
-      <div id="qaHist" class="stack" hidden>${historyCards}</div>` : '';
+      <div id="qaHist" class="stack hidden">${historyCards}</div>` : '';
     const del = `
       <div class="card">
         <button class="list-item list-item--danger" id="qaDelBtn">
@@ -1737,10 +1737,11 @@
 
     const histBtn = document.getElementById('qaHistBtn');
     if (histBtn) histBtn.onclick = () => {
+      // 用 .hidden 類別而不是 hidden 屬性：.stack 的 display:flex 會蓋掉屬性的預設 display:none
       const box = document.getElementById('qaHist');
-      box.hidden = !box.hidden;
-      histBtn.querySelector('.list-item__label').textContent = box.hidden ? `查看之前的版本（共 ${totalVersions} 版）` : '收合之前的版本';
-      document.getElementById('qaHistChev').textContent = box.hidden ? '›' : '⌄';
+      const collapsed = box.classList.toggle('hidden');
+      histBtn.querySelector('.list-item__label').textContent = collapsed ? `查看之前的版本（共 ${totalVersions} 版）` : '收合之前的版本';
+      document.getElementById('qaHistChev').textContent = collapsed ? '›' : '⌄';
     };
     const saveBtn = document.getElementById('qaSaveBtn');
     saveBtn.onclick = async () => {
