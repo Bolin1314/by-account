@@ -184,6 +184,24 @@
     .switch input:checked ~ .switch__track { background: var(--honey); }
     .switch input:checked ~ .switch__thumb { transform: translateX(18px); }
 
+    /* =============== 夫妻問答（T-010） =============== */
+    .qa-entry { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; cursor: pointer; margin-bottom: 14px; }
+    .qa-q { display: block; width: 100%; text-align: left; cursor: pointer; }
+    .qa-q:active { background: var(--soft); }
+    .qa-q__text { font-weight: 700; font-size: 15px; color: var(--ink); margin-bottom: 8px; }
+    .qa-ans { display: flex; gap: 8px; align-items: baseline; font-size: 13px; padding: 3px 0; }
+    .qa-ans__who { color: var(--honey-d); font-weight: 600; flex-shrink: 0; }
+    .qa-ans__text { flex: 1; min-width: 0; color: var(--ink-2); }
+    .qa-ans__time { color: var(--muted-2); font-size: 11px; flex-shrink: 0; }
+    .qa-text { white-space: pre-wrap; word-break: break-word; line-height: 1.6; font-size: 14px; color: var(--ink); }
+    .qa-ver { padding: 10px 0; border-top: 1px solid var(--line); }
+    .qa-ver__head { font-size: 12px; color: var(--muted); margin-bottom: 6px; line-height: 1.5; }
+    .qa-ver__pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .qa-ver__cur, .qa-ver__prev { padding: 8px 10px; border-radius: 10px; background: var(--honey-xl); min-width: 0; }
+    .qa-ver__prev { background: var(--soft); }
+    .qa-ver__prev .qa-text { color: var(--muted); }
+    .qa-ver__label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+
     /* =============== Card =============== */
     .card {
       background: var(--surface); border: 1px solid var(--line);
@@ -632,6 +650,7 @@
   const LS_LEDGER  = 'by_account:current_ledger';
   const LS_EXPIRES = 'by_account:expires_at';
   const LS_AVATAR  = 'by_account:avatar';
+  const LS_LOGIN_MODE = 'by_account:login_mode';   // T-009：session / remember / persistent
 
   // T-008 切換：舊裝置的 localStorage 可能還存著 Apps Script 網址（設定頁「變更連線」留下的），
   // 若不清掉，改了 WEB_APP_URL 常數也不會生效。連同舊 session 一起清（在新後端無效）。
@@ -661,8 +680,12 @@
     else localStorage.removeItem(LS_EXPIRES);
     scheduleExpiryCheck();
   }
+  function setLoginMode(v) {
+    if (v) localStorage.setItem(LS_LOGIN_MODE, v);
+    else localStorage.removeItem(LS_LOGIN_MODE);
+  }
   function clearAuth() {
-    setToken(''); setUser(null); setLedger(null); setExpiresAt(null);
+    setToken(''); setUser(null); setLedger(null); setExpiresAt(null); setLoginMode(null);
     state.cache = { sheets: null, accounts: null, categories: null };
   }
 
@@ -916,6 +939,8 @@
       case 'users':       return pageUsers();
       case 'members':     return pageMembers();
       case 'home':        return pageHome();
+      case 'qa':          return pageQa();
+      case 'qa-detail':   return pageQaDetail(params);
       case 'ledger':      return pageLedger(params);
       case 'add':         return pageAddRecord();
       case 'stats':       return pageStats(params);
@@ -982,9 +1007,10 @@
               <div style="font-size:12px;color:var(--muted)">${escapeHtml(u.role || '')}</div>
             </div>
           </div>
+          <button class="side-menu__btn" onclick="goAndCloseMenu('qa')">💞 <span>夫妻問答</span></button>
           <button class="side-menu__btn" onclick="goAndCloseMenu('settings')">⚙️ <span>設定</span></button>
           <button class="side-menu__btn side-menu__btn--danger" onclick="logout()"><img class="icon-inline" src="icons/logout.png" alt="" /> <span>登出</span></button>
-          <div class="side-menu__footer">by_account · v0.8</div>
+          <div class="side-menu__footer">by_account · v0.9</div>
         </aside>
       </div>
     `;
@@ -1021,11 +1047,26 @@
               <span class="input-wrap__icon">🔒</span>
               <input id="password" class="input input--with-icon" type="password" placeholder="密碼" autocomplete="current-password" />
             </div>
-            <label class="check">
-              <input type="checkbox" id="remember" />
-              <span class="check__box"></span>
-              <span class="check__label">記住我（30 天）</span>
-            </label>
+            <div class="stack" style="gap:8px;padding:2px 0">
+              <label class="check">
+                <input type="radio" name="loginMode" value="session" checked />
+                <span class="check__box"></span>
+                <span class="check__label">不記住（4 小時後自動登出）</span>
+              </label>
+              <label class="check">
+                <input type="radio" name="loginMode" value="remember" />
+                <span class="check__box"></span>
+                <span class="check__label">記住我（30 天）</span>
+              </label>
+              <label class="check">
+                <input type="radio" name="loginMode" value="persistent" />
+                <span class="check__box"></span>
+                <span class="check__label">永久記住此裝置（不用再輸入密碼）</span>
+              </label>
+              <div style="font-size:11px;color:var(--muted);padding-left:32px;line-height:1.5">
+                永久記住只到你登出或改密碼為止。iPhone 請先「加入主畫面」再登入，否則 Safari 會在 7 天沒開啟後清掉登入狀態。
+              </div>
+            </div>
             <button id="loginBtn" class="btn btn--primary btn--lg btn--block">登入</button>
             <div class="center-text" style="font-size:12px;color:var(--muted);padding-top:4px">
               <button onclick="location.hash='forgot'" style="color:inherit;text-decoration:underline;text-underline-offset:2px">忘記密碼？</button>
@@ -1041,13 +1082,18 @@
   async function doLogin() {
     const account = document.getElementById('account').value.trim();
     const password = document.getElementById('password').value;
-    const remember = document.getElementById('remember').checked;
+    const mode = (document.querySelector('input[name="loginMode"]:checked') || {}).value || 'session';
     if (!account || !password) return toast('請輸入帳號與密碼', 'error');
     const btn = document.getElementById('loginBtn');
     btn.disabled = true; btn.textContent = '登入中…';
     try {
-      const r = await api('login', { account, password, remember_me: remember, user_agent: navigator.userAgent });
-      setToken(r.session_token); setUser(r.user); setExpiresAt(r.expires_at);
+      const r = await api('login', {
+        account, password,
+        remember_me: mode === 'remember',
+        persistent: mode === 'persistent',
+        user_agent: navigator.userAgent
+      });
+      setToken(r.session_token); setUser(r.user); setExpiresAt(r.expires_at); setLoginMode(mode);
       if (r.user.must_change_password) {
         toast('請先設定你自己的新密碼 🔑');
         return navigate('change-pw', { force: '1' });
@@ -1083,7 +1129,11 @@
       not_a_member: '這個人不是成員',
       private_no_members: '私人帳本不能加成員',
       read_only: '你只有檢視權限',
-      admin_cannot_write_private: '管理員不能修改私人帳本'
+      admin_cannot_write_private: '管理員不能修改私人帳本',
+      question_text_invalid: '題目要 1～200 字',
+      answer_text_invalid: '作答要 1～2000 字',
+      question_not_found: '找不到這個題目（可能已被刪除）',
+      answer_unchanged: '內容和目前作答相同，沒有更新'
     })[code] || (String(code).startsWith('password_too_short') ? ('密碼至少要 ' + String(code).split(':')[1] + ' 碼') : code);
   }
 
@@ -1435,8 +1485,19 @@
         <div class="greet__sub">今天也要好好記帳喔～</div>
       </div>
     `;
+    // T-010：登入後第一個畫面的問答入口
+    const qaEntry = `
+      <button class="card card__pad-sm qa-entry" onclick="location.hash='qa'">
+        <span style="font-size:26px">💞</span>
+        <span class="grow">
+          <span style="display:block;font-weight:700;font-size:15px">夫妻問答</span>
+          <span style="display:block;font-size:12px;color:var(--muted)">出題、作答，回看彼此答案的變化</span>
+        </span>
+        <span class="ledger-card__chev">›</span>
+      </button>
+    `;
     if (!sheets.length) {
-      return render(appShell(greet + `
+      return render(appShell(greet + qaEntry + `
         <div class="card empty">
           <img class="empty__img" src="icons/empty-no-ledger.png" alt="" />
           <div class="empty__title">還沒有任何帳本</div>
@@ -1463,7 +1524,7 @@
         </button>
       `;
     }).join('');
-    render(appShell(greet + `<div class="ledger-list">${cards}</div>`, { title: '我的帳本' }));
+    render(appShell(greet + qaEntry + `<div class="ledger-list">${cards}</div>`, { title: '我的帳本' }));
     document.querySelectorAll('.ledger-card').forEach(b => {
       b.onclick = () => {
         if (b.dataset.locked === 'true') return toast('該帳本擁有者尚未授權', 'error');
@@ -1472,6 +1533,192 @@
         navigate('ledger', { id: sheet.id });
       };
     });
+  }
+
+  // =====================================================================
+  // 7.5 頁面：夫妻問答（T-010）
+  // 題目共用、作答各自、每次更新留一版；後端只讓 session 使用者改自己的作答。
+  // =====================================================================
+  function fmtMinute(iso) {
+    const d = new Date(iso);
+    if (!iso || isNaN(d)) return iso || '';
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  function durationText(ms) {
+    const m = Math.round(ms / 60000);
+    if (m < 1) return '不到 1 分鐘';
+    if (m < 60) return m + ' 分鐘';
+    const h = Math.round(m / 60);
+    if (h < 24) return h + ' 小時';
+    const d = Math.round(h / 24);
+    if (d < 30) return d + ' 天';
+    const mo = Math.round(d / 30);
+    if (mo < 12) return mo + ' 個月';
+    return (d / 365).toFixed(1) + ' 年';
+  }
+  function relTime(iso) {
+    const ms = Date.now() - new Date(iso).getTime();
+    return ms < 60000 ? '剛剛' : durationText(ms) + '前';
+  }
+  function qaUserName(users, uid) {
+    const u = (users || []).find(x => x.id === uid);
+    return u ? (u.display_name || u.account) : '？';
+  }
+
+  async function pageQa() {
+    const tk = _routeToken;
+    const title = '夫妻問答';
+    render(appShell(`<div class="empty"><img class="empty__img empty__img--loading" src="icons/loading.png" alt="" /><div class="empty__hint">讀取中…</div></div>`, { title, back: true }));
+    let data;
+    try {
+      data = await api('list_questions');
+    } catch (e) {
+      if (tk !== _routeToken) return;
+      return render(appShell(`<div class="card card__pad" style="color:var(--brick)">載入失敗：${escapeHtml(friendlyErr(e.message))}</div>`, { title, back: true }));
+    }
+    if (tk !== _routeToken) return;
+    const me = (state.user || {}).id;
+
+    const addForm = `
+      <div class="card card__pad-sm">
+        <div class="row">
+          <input id="qaNew" class="input grow" placeholder="新增題目，例如：喜歡吃什麼？" maxlength="200" />
+          <button id="qaAddBtn" class="btn btn--primary">新增</button>
+        </div>
+      </div>`;
+    const list = data.questions.map(q => {
+      const rows = data.users.map(u => {
+        const a = q.answers[u.id];
+        return `
+          <div class="qa-ans">
+            <span class="qa-ans__who">${escapeHtml(qaUserName(data.users, u.id))}${u.id === me ? '（我）' : ''}</span>
+            <span class="qa-ans__text truncate">${a ? escapeHtml(a.text) : '<span style="color:var(--muted-2)">尚未作答</span>'}</span>
+            <span class="qa-ans__time">${a ? fmtMinute(a.answered_at) : ''}</span>
+          </div>`;
+      }).join('');
+      return `<button class="card card__pad-sm qa-q" data-id="${q.id}"><div class="qa-q__text">${escapeHtml(q.text)}</div>${rows}</button>`;
+    }).join('') || `
+      <div class="card empty">
+        <div class="empty__icon">💞</div>
+        <div class="empty__title">還沒有題目</div>
+        <div class="empty__hint">先出一題吧，例如「喜歡吃什麼？」</div>
+      </div>`;
+
+    render(appShell(`<div class="stack">${addForm}<div class="stack stack-sm">${list}</div></div>`, { title, back: true }));
+
+    const addBtn = document.getElementById('qaAddBtn');
+    const input = document.getElementById('qaNew');
+    const doAdd = async () => {
+      const text = input.value.trim();
+      if (!text) return toast('請輸入題目', 'error');
+      addBtn.disabled = true;
+      try {
+        await api('create_question', { text });
+        toast('題目已新增 ✨', 'success');
+        pageQa();
+      } catch (e) {
+        toast('失敗：' + friendlyErr(e.message), 'error');
+        addBtn.disabled = false;
+      }
+    };
+    addBtn.onclick = doAdd;
+    input.onkeydown = e => { if (e.key === 'Enter') doAdd(); };
+    document.querySelectorAll('.qa-q').forEach(b => {
+      b.onclick = () => navigate('qa-detail', { id: b.dataset.id });
+    });
+  }
+
+  async function pageQaDetail(params) {
+    const tk = _routeToken;
+    const id = params.id || '';
+    const title = '問答';
+    render(appShell(`<div class="empty"><img class="empty__img empty__img--loading" src="icons/loading.png" alt="" /><div class="empty__hint">讀取中…</div></div>`, { title, back: true }));
+    let data;
+    try {
+      data = await api('list_answer_history', { question_id: id });
+    } catch (e) {
+      if (tk !== _routeToken) return;
+      return render(appShell(`<div class="card card__pad" style="color:var(--brick)">載入失敗：${escapeHtml(friendlyErr(e.message))}</div>`, { title, back: true }));
+    }
+    if (tk !== _routeToken) return;
+    const me = (state.user || {}).id;
+    const byUser = {};
+    data.history.forEach(a => { (byUser[a.user_id] = byUser[a.user_id] || []).push(a); });   // 已是時間倒序
+    const mine = (byUser[me] || [])[0];
+
+    const questionCard = `
+      <div class="card card__pad">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">題目 · ${escapeHtml(qaUserName(data.users, data.question.created_by))} 出題 · ${fmtMinute(data.question.created_at)}</div>
+        <div style="font-weight:800;font-size:18px;line-height:1.5">${escapeHtml(data.question.text)}</div>
+      </div>`;
+    const myCard = `
+      <div class="card card__pad stack-sm">
+        <div style="font-weight:700">✍️ 我的作答</div>
+        <textarea id="qaText" class="textarea" rows="3" maxlength="2000" placeholder="寫下你的答案…">${escapeHtml(mine ? mine.text : '')}</textarea>
+        <div class="row" style="justify-content:space-between;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--muted)">${mine ? '上次更新：' + fmtMinute(mine.answered_at) + '（' + relTime(mine.answered_at) + '）' : '尚未作答'}</span>
+          <button id="qaSaveBtn" class="btn btn--primary">${mine ? '更新作答' : '送出作答'}</button>
+        </div>
+      </div>`;
+    const others = data.users.filter(u => u.id !== me).map(u => {
+      const a = (byUser[u.id] || [])[0];
+      return `
+        <div class="card card__pad stack-xs">
+          <div style="font-weight:700">💬 ${escapeHtml(qaUserName(data.users, u.id))} 的作答</div>
+          <div class="qa-text">${a ? escapeHtml(a.text) : '<span style="color:var(--muted-2)">尚未作答</span>'}</div>
+          ${a ? `<div style="font-size:12px;color:var(--muted)">更新：${fmtMinute(a.answered_at)}（${relTime(a.answered_at)}）</div>` : ''}
+        </div>`;
+    }).join('');
+    const history = data.users.map(u => {
+      const list = byUser[u.id] || [];
+      if (!list.length) return '';
+      const items = list.map((a, i) => {
+        const prev = list[i + 1];
+        const gap = prev ? ' · 距前一版 ' + durationText(new Date(a.answered_at) - new Date(prev.answered_at)) : ' · 第一次作答';
+        return `
+          <div class="qa-ver">
+            <div class="qa-ver__head">第 ${list.length - i} 版 · ${fmtMinute(a.answered_at)} · ${relTime(a.answered_at)}${gap}</div>
+            <div class="qa-ver__pair">
+              <div class="qa-ver__cur"><div class="qa-ver__label">這一版</div><div class="qa-text">${escapeHtml(a.text)}</div></div>
+              ${prev ? `<div class="qa-ver__prev"><div class="qa-ver__label">前一版 · ${fmtMinute(prev.answered_at)}</div><div class="qa-text">${escapeHtml(prev.text)}</div></div>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+      return `<div class="card card__pad"><div style="font-weight:700;margin-bottom:4px">🕘 ${escapeHtml(qaUserName(data.users, u.id))}${u.id === me ? '（我）' : ''} 的作答紀錄 · ${list.length} 版</div>${items}</div>`;
+    }).join('');
+    const del = `
+      <div class="card">
+        <button class="list-item list-item--danger" id="qaDelBtn">
+          <span class="list-item__icon">🗑️</span>
+          <span class="list-item__label">刪除這個題目</span>
+        </button>
+      </div>`;
+
+    render(appShell(`<div class="stack">${questionCard}${myCard}${others}${history}${del}</div>`, { title, back: true }));
+
+    const saveBtn = document.getElementById('qaSaveBtn');
+    saveBtn.onclick = async () => {
+      const text = document.getElementById('qaText').value.trim();
+      if (!text) return toast('請輸入作答', 'error');
+      saveBtn.disabled = true; saveBtn.textContent = '儲存中…';
+      try {
+        await api('answer_question', { question_id: id, text });
+        toast('作答已更新 ✨', 'success');
+        pageQaDetail(params);
+      } catch (e) {
+        toast(friendlyErr(e.message), 'error');
+        saveBtn.disabled = false; saveBtn.textContent = mine ? '更新作答' : '送出作答';
+      }
+    };
+    document.getElementById('qaDelBtn').onclick = async () => {
+      if (!confirm('確定刪除題目「' + data.question.text + '」？\n這是軟刪除：題目不再顯示，作答紀錄仍留在資料庫。')) return;
+      try {
+        await api('delete_question', { question_id: id });
+        toast('題目已刪除', 'success');
+        navigate('qa');
+      } catch (e) { toast('失敗：' + friendlyErr(e.message), 'error'); }
+    };
   }
 
   // =====================================================================
@@ -2179,6 +2426,8 @@
           </button>
         </div>
 
+        ${ loginModeCard() }
+
         ${ state.ledger && state.ledger.visibility === 'shared' && (state.ledger.is_owner || state.ledger.role === 'owner' || isAdmin) ? `
           <div class="card">
             <button class="list-item" onclick="location.hash='members'">
@@ -2226,11 +2475,29 @@
         </div>
 
         <div class="center-text" style="font-size:11px;color:var(--muted-2);padding:8px 0 16px">
-          by_account · v0.8 ·
+          by_account · v0.9 ·
           <button onclick="location.hash='reset-url'" style="color:inherit;text-decoration:underline;text-underline-offset:2px">變更連線</button>
         </div>
       </div>
     `, { title: '設定' }));
+  }
+  // T-009：本裝置的登入方式與到期時間（來源：登入時存的 localStorage）
+  function loginModeCard() {
+    const mode = localStorage.getItem(LS_LOGIN_MODE) || '';
+    const iso = localStorage.getItem(LS_EXPIRES) || '';
+    const label = { persistent: '永久記住此裝置', remember: '記住我（30 天）', session: '不記住（4 小時）' }[mode] || '未記錄（舊版登入）';
+    const hint = mode === 'persistent'
+      ? '要讓這台裝置失效：按「登出」，或在任一裝置修改密碼。iPhone 請把 App 加入主畫面，避免 Safari 清掉登入狀態。'
+      : (mode === 'remember' || mode === 'session') && iso ? '到期後需重新輸入密碼。' : '';
+    return `
+      <div class="card">
+        <div class="toggle-row" style="cursor:default">
+          <div class="toggle-row__main">
+            <div class="toggle-row__title">📱 本裝置登入方式：${escapeHtml(label)}</div>
+            <div class="toggle-row__sub">${ iso ? '到期：' + escapeHtml(fmtDateTime(iso)) : '' }${ hint ? '<br/>' + escapeHtml(hint) : '' }</div>
+          </div>
+        </div>
+      </div>`;
   }
   function quickCreateSheet() { navigate('new-ledger'); }
   async function saveSheetFlags() {
