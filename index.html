@@ -201,6 +201,8 @@
     .qa-ver__prev { background: var(--soft); }
     .qa-ver__prev .qa-text { color: var(--muted); }
     .qa-ver__label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    .qa-choice .check { display: flex; padding: 6px 0; }
+    .qa-choice .check + .check { border-top: 1px solid var(--line); }
 
     /* =============== Card =============== */
     .card {
@@ -1134,7 +1136,8 @@
       answer_text_invalid: '作答要 1～2000 字',
       question_not_found: '找不到這個題目（可能已被刪除）',
       answer_unchanged: '內容和目前作答相同，沒有更新',
-      cannot_delete_self: '不能刪除自己的帳號'
+      cannot_delete_self: '不能刪除自己的帳號',
+      question_options_invalid: '選擇題要 2～10 個選項，每個 1～50 字'
     })[code] || (String(code).startsWith('password_too_short') ? ('密碼至少要 ' + String(code).split(':')[1] + ' 碼') : code);
   }
 
@@ -1605,6 +1608,14 @@
           <input id="qaNew" class="input grow" placeholder="新增題目，例如：喜歡吃什麼？" maxlength="200" />
           <button id="qaAddBtn" class="btn btn--primary">新增</button>
         </div>
+        <div class="row" style="gap:16px">
+          <label class="check"><input type="radio" name="qaKind" value="text" checked /><span class="check__box"></span><span class="check__label">文字題</span></label>
+          <label class="check"><input type="radio" name="qaKind" value="choice" /><span class="check__box"></span><span class="check__label">選擇題（可複選）</span></label>
+        </div>
+        <div id="qaChoiceBox" class="stack-sm hidden">
+          <textarea id="qaOptions" class="textarea" rows="4" placeholder="選項一行一個，2～10 個，例如：\n抱抱你\n陪你講講話\n安靜陪在你身邊"></textarea>
+          <label class="check"><input type="checkbox" id="qaAllowOther" checked /><span class="check__box"></span><span class="check__label">允許勾「其他」並填文字</span></label>
+        </div>
         <div class="row">
           <span style="font-size:13px;color:var(--muted);flex-shrink:0">看誰的作答</span>
           <select id="qaWho" class="select grow">
@@ -1623,7 +1634,8 @@
             <span class="qa-ans__time">${a ? fmtMinute(a.answered_at) : ''}</span>
           </div>`;
       }).join('');
-      return `<button class="card card__pad-sm qa-q" data-id="${q.id}"><div class="qa-q__text">${escapeHtml(q.text)}</div>${rows}</button>`;
+      const kindChip = q.kind === 'choice' ? ' <span class="chip chip--lilac" style="font-size:11px;vertical-align:middle">可複選</span>' : '';
+      return `<button class="card card__pad-sm qa-q" data-id="${q.id}"><div class="qa-q__text">${escapeHtml(q.text)}${kindChip}</div>${rows}</button>`;
     }).join('') || `
       <div class="card empty">
         <div class="empty__icon">💞</div>
@@ -1635,12 +1647,22 @@
 
     const addBtn = document.getElementById('qaAddBtn');
     const input = document.getElementById('qaNew');
+    document.querySelectorAll('input[name="qaKind"]').forEach(r => {
+      r.onchange = () => document.getElementById('qaChoiceBox').classList.toggle('hidden', r.value !== 'choice' || !r.checked);
+    });
     const doAdd = async () => {
       const text = input.value.trim();
       if (!text) return toast('請輸入題目', 'error');
+      const kind = (document.querySelector('input[name="qaKind"]:checked') || {}).value || 'text';
+      const payload = { text, kind };
+      if (kind === 'choice') {
+        payload.options = document.getElementById('qaOptions').value.split('\n').map(x => x.trim()).filter(Boolean);
+        payload.allow_other = document.getElementById('qaAllowOther').checked;
+        if (payload.options.length < 2) return toast('選擇題至少要 2 個選項', 'error');
+      }
       addBtn.disabled = true;
       try {
-        await api('create_question', { text });
+        await api('create_question', payload);
         toast('題目已新增 ✨', 'success');
         pageQa();
       } catch (e) {
@@ -1679,10 +1701,27 @@
         <div style="font-size:12px;color:var(--muted);margin-bottom:4px">題目 · ${escapeHtml(qaUserName(data.users, data.question.created_by))} 出題 · ${fmtMinute(data.question.created_at)}</div>
         <div style="font-weight:800;font-size:18px;line-height:1.5">${escapeHtml(data.question.text)}</div>
       </div>`;
+    const isChoice = data.question.kind === 'choice';
+    const mySel = (mine && mine.selected) || { options: [], other: '' };
+    const answerInput = isChoice ? `
+        <div class="qa-choice">
+          ${data.question.options.map((o, i) => `
+            <label class="check" style="padding:4px 0">
+              <input type="checkbox" class="qaOpt" value="${escapeHtml(o)}" ${mySel.options.includes(o) ? 'checked' : ''} />
+              <span class="check__box"></span><span class="check__label">${escapeHtml(o)}</span>
+            </label>`).join('')}
+          ${data.question.allow_other ? `
+            <label class="check" style="padding:4px 0">
+              <input type="checkbox" id="qaOtherChk" ${mySel.other ? 'checked' : ''} />
+              <span class="check__box"></span><span class="check__label">其他</span>
+            </label>
+            <input id="qaOther" class="input" maxlength="200" placeholder="其他（請填文字）" value="${escapeHtml(mySel.other || '')}" />` : ''}
+        </div>` : `
+        <textarea id="qaText" class="textarea" rows="3" maxlength="2000" placeholder="寫下你的答案…">${escapeHtml(mine ? mine.text : '')}</textarea>`;
     const myCard = `
       <div class="card card__pad stack-sm">
-        <div style="font-weight:700">✍️ 我的作答</div>
-        <textarea id="qaText" class="textarea" rows="3" maxlength="2000" placeholder="寫下你的答案…">${escapeHtml(mine ? mine.text : '')}</textarea>
+        <div style="font-weight:700">✍️ 我的作答${isChoice ? '<span style="font-weight:400;font-size:12px;color:var(--muted)">（可複選）</span>' : ''}</div>
+        ${answerInput}
         <div class="row" style="justify-content:space-between;flex-wrap:wrap">
           <span style="font-size:12px;color:var(--muted)">${mine ? '上次更新：' + fmtMinute(mine.answered_at) + '（' + relTime(mine.answered_at) + '）' : '尚未作答'}</span>
           <button id="qaSaveBtn" class="btn btn--primary">${mine ? '更新作答' : '送出作答'}</button>
@@ -1745,11 +1784,22 @@
     };
     const saveBtn = document.getElementById('qaSaveBtn');
     saveBtn.onclick = async () => {
-      const text = document.getElementById('qaText').value.trim();
-      if (!text) return toast('請輸入作答', 'error');
+      let payload;
+      if (isChoice) {
+        const selected = [...document.querySelectorAll('.qaOpt:checked')].map(x => x.value);
+        const otherChk = document.getElementById('qaOtherChk');
+        const other = otherChk && otherChk.checked ? document.getElementById('qaOther').value.trim() : '';
+        if (otherChk && otherChk.checked && !other) return toast('勾了「其他」要填文字', 'error');
+        if (!selected.length && !other) return toast('至少勾 1 個選項', 'error');
+        payload = { question_id: id, selected, other };
+      } else {
+        const text = document.getElementById('qaText').value.trim();
+        if (!text) return toast('請輸入作答', 'error');
+        payload = { question_id: id, text };
+      }
       saveBtn.disabled = true; saveBtn.textContent = '儲存中…';
       try {
-        await api('answer_question', { question_id: id, text });
+        await api('answer_question', payload);
         toast('作答已更新 ✨', 'success');
         pageQaDetail(params);
       } catch (e) {
